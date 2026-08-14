@@ -328,3 +328,39 @@ export async function removeTenantFromRoom(formData: FormData) {
   revalidatePath("/admin/rooms");
   redirect("/admin/rooms");
 }
+
+// ============================================================
+// Append this to lib/actions.ts (imports already present in that
+// file cover everything this needs: redirect, revalidatePath,
+// createClient, getSessionUser).
+// ============================================================
+
+export async function updateTenantProfile(formData: FormData) {
+  const session = await getSessionUser();
+  if (!session) redirect("/");
+
+  const phone = String(formData.get("phone") ?? "").trim();
+  const emergencyContactName = String(
+    formData.get("emergencyContactName") ?? ""
+  ).trim();
+  const emergencyContactNumber = String(
+    formData.get("emergencyContactNumber") ?? ""
+  ).trim();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("users")
+    .update({
+      phone: phone || null,
+      emergency_contact_name: emergencyContactName || null,
+      emergency_contact_number: emergencyContactNumber || null,
+    })
+    .eq("id", session.user.id);
+
+  if (error) {
+    redirect("/tenant?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/tenant");
+  redirect("/tenant?saved=1");
+}
