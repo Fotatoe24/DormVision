@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions";
@@ -20,6 +20,9 @@ const navItems: NavItem[] = [
   { label: "Monitoring" },
   { label: "Settings" },
 ];
+
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 function BrandMark() {
   return (
@@ -45,48 +48,57 @@ function BrandMark() {
 
 function NavList({
   pathname,
+  label,
   onNavigate,
 }: {
   pathname: string;
+  label: string;
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="flex flex-1 flex-col gap-0.5 px-3">
-      {navItems.map((item) => {
-        if (!item.href) {
+    <nav aria-label={label} className="flex-1 px-3">
+      <ul className="flex flex-col gap-0.5">
+        {navItems.map((item) => {
+          if (!item.href) {
+            return (
+              <li key={item.label}>
+                <span
+                  aria-disabled="true"
+                  title="Coming soon"
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-foreground-muted/70"
+                >
+                  {item.label}
+                  <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                    Soon
+                  </span>
+                </span>
+              </li>
+            );
+          }
+
+          const isActive =
+            item.href === "/admin"
+              ? pathname === "/admin"
+              : pathname.startsWith(item.href);
+
           return (
-            <span
-              key={item.label}
-              className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-foreground-muted/50"
-            >
-              {item.label}
-              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-                Soon
-              </span>
-            </span>
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={isActive ? "page" : undefined}
+                className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${focusRing} ${
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </Link>
+            </li>
           );
-        }
-
-        const isActive =
-          item.href === "/admin"
-            ? pathname === "/admin"
-            : pathname.startsWith(item.href);
-
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
-            }`}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
+        })}
+      </ul>
     </nav>
   );
 }
@@ -102,6 +114,31 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close on route change, so navigating never leaves the drawer stuck open.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+
+    closeButtonRef.current?.focus();
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDrawerOpen(false);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", handleKeyDown);
+      menuButtonRef.current?.focus();
+    };
+  }, [drawerOpen]);
 
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
@@ -111,7 +148,7 @@ export function AdminShell({
       <form action={logout}>
         <button
           type="submit"
-          className="mt-1 w-full rounded-md px-3 py-1.5 text-left text-xs text-foreground-muted hover:bg-surface-muted hover:text-foreground"
+          className={`mt-1 w-full rounded-md px-3 py-1.5 text-left text-xs text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
         >
           Sign out
         </button>
@@ -121,8 +158,16 @@ export function AdminShell({
 
   return (
     <div className="flex min-h-full flex-1">
+      {/* Skip link — visible only when focused, lets keyboard users bypass the nav */}
+      <a
+        href="#main-content"
+        className={`sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-xs focus:font-medium focus:text-surface ${focusRing}`}
+      >
+        Skip to content
+      </a>
+
       {/* Desktop sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface sm:flex">
+      <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface sm:flex">
         <div className="flex items-center gap-2 px-4 py-4">
           <BrandMark />
           <div className="min-w-0">
@@ -134,39 +179,52 @@ export function AdminShell({
             </p>
           </div>
         </div>
-        <NavList pathname={pathname} />
+        <NavList pathname={pathname} label="Admin" />
         {sidebarFooter}
       </aside>
 
-      {/* Mobile topbar */}
       <div className="flex flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 sm:hidden">
-          <div className="flex items-center gap-2">
-            <BrandMark />
-            <p className="font-heading text-sm font-semibold text-foreground">
-              DormVision
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Open menu"
-            className="rounded-md border border-border p-1.5 text-foreground-muted hover:text-foreground"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        {/* Content that must be inert while the mobile drawer is open, so
+            keyboard/AT users can't reach it behind the overlay. */}
+        <div inert={drawerOpen ? true : undefined} className="contents">
+          {/* Mobile topbar */}
+          <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 sm:hidden">
+            <div className="flex items-center gap-2">
+              <BrandMark />
+              <p className="font-heading text-sm font-semibold text-foreground">
+                DormVision
+              </p>
+            </div>
+            <button
+              ref={menuButtonRef}
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              className={`rounded-md border border-border p-1.5 text-foreground-muted hover:text-foreground ${focusRing}`}
             >
-              <path d="M3 6h18M3 12h18M3 18h18" />
-            </svg>
-          </button>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 6h18M3 12h18M3 18h18" />
+              </svg>
+            </button>
+          </div>
+
+          <main
+            id="main-content"
+            className="flex-1 bg-background px-6 py-10 text-foreground"
+          >
+            {children}
+          </main>
         </div>
 
         {/* Mobile drawer */}
@@ -178,7 +236,12 @@ export function AdminShell({
               onClick={() => setDrawerOpen(false)}
               className="absolute inset-0 bg-foreground/30"
             />
-            <div className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-lg">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menu"
+              className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-lg"
+            >
               <div className="flex items-center justify-between px-4 py-4">
                 <div className="flex items-center gap-2">
                   <BrandMark />
@@ -187,10 +250,11 @@ export function AdminShell({
                   </p>
                 </div>
                 <button
+                  ref={closeButtonRef}
                   type="button"
                   aria-label="Close menu"
                   onClick={() => setDrawerOpen(false)}
-                  className="text-foreground-muted hover:text-foreground"
+                  className={`text-foreground-muted hover:text-foreground ${focusRing}`}
                 >
                   <svg
                     width="18"
@@ -209,16 +273,13 @@ export function AdminShell({
               </div>
               <NavList
                 pathname={pathname}
+                label="Menu"
                 onNavigate={() => setDrawerOpen(false)}
               />
               {sidebarFooter}
             </div>
           </div>
         )}
-
-        <main className="flex-1 bg-background px-6 py-10 text-foreground">
-          {children}
-        </main>
       </div>
     </div>
   );
