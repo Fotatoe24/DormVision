@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { updateTenantProfile, logout } from "@/lib/actions";
+import { SubmitButton } from "@/components/submit-button";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -177,12 +178,12 @@ export default async function TenantPage({
               />
             </div>
 
-            <button
-              type="submit"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
+            <SubmitButton
+              pendingText="Saving…"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               Save profile
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

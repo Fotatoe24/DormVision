@@ -2,6 +2,7 @@ import Link from "next/link";
 import { signUpTenant } from "@/lib/actions";
 import { ToastListener } from "@/components/toast-listener";
 import { SubmitButton } from "@/components/submit-button";
+import { PasswordInput } from "@/components/password-input";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -23,7 +24,7 @@ export default function TenantSignUpPage() {
 
         <form
           action={signUpTenant}
-          className="rounded-lg border border-border bg-surface p-6"
+          className="rounded-lg border border-border bg-surface p-6 shadow-sm"
         >
           <div className="mb-4">
             <label htmlFor="dormCode" className={labelClass}>
@@ -85,10 +86,9 @@ export default function TenantSignUpPage() {
             <label htmlFor="password" className={labelClass}>
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={6}

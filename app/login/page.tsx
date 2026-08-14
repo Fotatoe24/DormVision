@@ -4,6 +4,11 @@ import { getSessionUser } from "@/lib/auth";
 import { login } from "@/lib/actions";
 import { ToastListener } from "@/components/toast-listener";
 import { SubmitButton } from "@/components/submit-button";
+import { PasswordInput } from "@/components/password-input";
+
+const inputClass =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
+const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
 
 export default async function Home() {
   const session = await getSessionUser();
@@ -18,10 +23,10 @@ export default async function Home() {
       <ToastListener />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-primary text-surface">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-primary text-surface">
             <svg
-              width="18"
-              height="18"
+              width="19"
+              height="19"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -45,13 +50,10 @@ export default async function Home() {
 
         <form
           action={login}
-          className="rounded-lg border border-border bg-surface p-6"
+          className="rounded-lg border border-border bg-surface p-6 shadow-sm"
         >
           <div className="mb-4">
-            <label
-              htmlFor="email"
-              className="mb-1.5 block text-xs font-medium text-foreground-muted"
-            >
+            <label htmlFor="email" className={labelClass}>
               Email
             </label>
             <input
@@ -61,25 +63,21 @@ export default async function Home() {
               autoComplete="email"
               required
               placeholder="you@dormvision.com"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary"
+              className={inputClass}
             />
           </div>
 
           <div className="mb-5">
-            <label
-              htmlFor="password"
-              className="mb-1.5 block text-xs font-medium text-foreground-muted"
-            >
+            <label htmlFor="password" className={labelClass}>
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               autoComplete="current-password"
               required
               placeholder="••••••••"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary"
+              className={inputClass}
             />
           </div>
 
