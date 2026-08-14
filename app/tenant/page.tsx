@@ -1,21 +1,85 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { logout } from "@/lib/actions";
+import { createClient } from "@/lib/supabase/server";
+import {
+  createRoom,
+  updateRoomStatus,
+  deleteRoom,
+  assignTenantToRoom,
+  removeTenantFromRoom,
+  logout,
+} from "@/lib/actions";
 
-export default async function TenantPage() {
+const inputClass =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
+const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
+
+const statusStyles: Record<string, string> = {
+  available: "bg-status-paid/15 text-status-paid",
+  full: "bg-status-unpaid/15 text-status-unpaid",
+  maintenance: "bg-status-partial/15 text-status-partial",
+};
+
+export default async function RoomsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const session = await getSessionUser();
 
-  if (!session) {
-    redirect("/");
+  if (!session) redirect("/");
+  if (session.profile?.role !== "owner") redirect("/tenant");
+
+  const dormId = session.profile.dorm_id;
+  const supabase = await createClient();
+
+  const { data: rooms } = await supabase
+    .from("rooms")
+    .select("id, room_number, capacity, monthly_rate, status")
+    .eq("dorm_id", dormId)
+    .order("room_number");
+
+  const { data: tenants } = await supabase
+    .from("users")
+    .select("id, full_name, email, room_id")
+    .eq("dorm_id", dormId)
+    .eq("role", "tenant")
+    .order("full_name");
+
+  const tenantsByRoom = new Map<string, typeof tenants>();
+  const unassigned: typeof tenants = [];
+  for (const t of tenants ?? []) {
+    if (t.room_id) {
+      const list = tenantsByRoom.get(t.room_id) ?? [];
+      list.push(t);
+      tenantsByRoom.set(t.room_id, list);
+    } else {
+      unassigned!.push(t);
+    }
   }
+
+  const roomsWithSpace = (rooms ?? []).filter((r) => {
+    const occ = tenantsByRoom.get(r.id)?.length ?? 0;
+    return occ < r.capacity;
+  });
 
   return (
     <main className="flex-1 bg-background px-6 py-10 text-foreground">
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="font-heading text-lg font-semibold text-primary">
-            DormVision
-          </h1>
+          <div>
+            <Link
+              href="/admin"
+              className="text-xs text-foreground-muted hover:text-foreground"
+            >
+              ← Dashboard
+            </Link>
+            <h1 className="font-heading text-lg font-semibold text-primary">
+              Rooms
+            </h1>
+          </div>
           <form action={logout}>
             <button
               type="submit"
@@ -26,14 +90,217 @@ export default async function TenantPage() {
           </form>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-6">
-          <p className="font-heading text-sm font-semibold mb-1">
-            Welcome, {session.profile?.full_name ?? session.user.email}
-          </p>
-          <p className="text-sm text-foreground-muted">
-            Your billing, room, and payment info will show up here once
-            Phase&nbsp;2 (billing) is built.
-          </p>
+        {error && (
+          <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">
+            {error}
+          </div>
+        )}
+
+        {/* Add room */}
+        <form
+          action={createRoom}
+          className="mb-6 rounded-lg border border-border bg-surface p-6"
+        >
+          <p className="mb-4 font-heading text-sm font-semibold">Add a room</p>
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="roomNumber" className={labelClass}>
+                Room number
+              </label>
+              <input
+                id="roomNumber"
+                name="roomNumber"
+                type="text"
+                required
+                placeholder="204"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="capacity" className={labelClass}>
+                Capacity
+              </label>
+              <input
+                id="capacity"
+                name="capacity"
+                type="number"
+                min={1}
+                required
+                placeholder="2"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="monthlyRate" className={labelClass}>
+                Monthly rate
+              </label>
+              <input
+                id="monthlyRate"
+                name="monthlyRate"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="3500"
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
+          >
+            Add room
+          </button>
+        </form>
+
+        {/* Rooms list */}
+        <div className="mb-6 space-y-3">
+          {(rooms ?? []).length === 0 && (
+            <p className="rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
+              No rooms yet — add your first one above.
+            </p>
+          )}
+
+          {(rooms ?? []).map((room) => {
+            const occupants = tenantsByRoom.get(room.id) ?? [];
+            return (
+              <div
+                key={room.id}
+                className="rounded-lg border border-border bg-surface p-5"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <p className="font-heading text-sm font-semibold">
+                      Room {room.room_number}
+                    </p>
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        statusStyles[room.status]
+                      }`}
+                    >
+                      {room.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-foreground-muted">
+                    <span className="font-mono">
+                      {occupants.length}/{room.capacity}
+                    </span>
+                    <span className="font-mono text-accent">
+                      ₱{Number(room.monthly_rate).toLocaleString()}/mo
+                    </span>
+                  </div>
+                </div>
+
+                {occupants.length > 0 && (
+                  <div className="mb-3 space-y-1.5">
+                    {occupants.map((t) => (
+                      <div
+                        key={t!.id}
+                        className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-1.5"
+                      >
+                        <span className="text-xs">{t!.full_name}</span>
+                        <form action={removeTenantFromRoom}>
+                          <input type="hidden" name="tenantId" value={t!.id} />
+                          <input type="hidden" name="roomId" value={room.id} />
+                          <button
+                            type="submit"
+                            className="text-xs text-foreground-muted hover:text-status-overdue"
+                          >
+                            Remove
+                          </button>
+                        </form>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <form action={updateRoomStatus}>
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <input
+                      type="hidden"
+                      name="status"
+                      value={
+                        room.status === "maintenance"
+                          ? "available"
+                          : "maintenance"
+                      }
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+                    >
+                      {room.status === "maintenance"
+                        ? "Mark available"
+                        : "Mark under maintenance"}
+                    </button>
+                  </form>
+
+                  {occupants.length === 0 && (
+                    <form action={deleteRoom}>
+                      <input type="hidden" name="roomId" value={room.id} />
+                      <button
+                        type="submit"
+                        className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
+                      >
+                        Delete room
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Unassigned tenants */}
+        <div className="rounded-lg border border-border bg-surface overflow-hidden">
+          <div className="border-b border-border px-4 py-3 text-sm font-heading font-semibold">
+            Unassigned tenants
+          </div>
+          {unassigned && unassigned.length > 0 ? (
+            <div>
+              {unassigned.map((t, i) => (
+                <form
+                  action={assignTenantToRoom}
+                  key={t!.id}
+                  className={`flex items-center justify-between gap-3 px-4 py-3 ${
+                    i < unassigned.length - 1 ? "border-b border-border" : ""
+                  }`}
+                >
+                  <input type="hidden" name="tenantId" value={t!.id} />
+                  <div>
+                    <p className="text-sm font-medium">{t!.full_name}</p>
+                    <p className="text-xs text-foreground-muted">{t!.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      name="roomId"
+                      required
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                    >
+                      <option value="">Assign to room…</option>
+                      {roomsWithSpace.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          Room {r.room_number}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
+                    >
+                      Assign
+                    </button>
+                  </div>
+                </form>
+              ))}
+            </div>
+          ) : (
+            <p className="px-4 py-6 text-center text-sm text-foreground-muted">
+              Every tenant has a room.
+            </p>
+          )}
         </div>
       </div>
     </main>

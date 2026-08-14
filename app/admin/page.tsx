@@ -35,14 +35,22 @@ export default async function AdminPage() {
           <h1 className="font-heading text-lg font-semibold text-primary">
             DormVision
           </h1>
-          <form action={logout}>
-            <button
-              type="submit"
+          <div className="flex items-center gap-3">
+            <a
+              href="/admin/rooms"
               className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
             >
-              Sign out
-            </button>
-          </form>
+              Manage rooms
+            </a>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
 
         <div className="mb-4 rounded-lg border border-border bg-surface p-6">
