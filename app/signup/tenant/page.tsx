@@ -1,19 +1,16 @@
 import Link from "next/link";
 import { signUpTenant } from "@/lib/actions";
+import { ToastListener } from "@/components/toast-listener";
+import { SubmitButton } from "@/components/submit-button";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
 const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
 
-export default async function TenantSignUpPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
-
+export default function TenantSignUpPage() {
   return (
     <main className="flex min-h-full flex-1 items-center justify-center bg-background px-6 py-12">
+      <ToastListener />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <h1 className="font-heading text-lg font-semibold text-foreground">
@@ -100,18 +97,12 @@ export default async function TenantSignUpPage({
             />
           </div>
 
-          {error && (
-            <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="w-full rounded-md bg-primary py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
+          <SubmitButton
+            pendingText="Joining…"
+            className="w-full rounded-md bg-primary py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             Join dormitory
-          </button>
+          </SubmitButton>
         </form>
 
         <p className="mt-4 text-center text-xs text-foreground-muted">
