@@ -177,6 +177,7 @@ export async function signUpOwner(formData: FormData) {
   // If email confirmation is disabled, they already have a session.
   redirect("/admin");
 }
+
 // ---------- Tenant sign-up: joins an existing dormitory via its Dorm ID ----------
 export async function signUpTenant(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
@@ -223,17 +224,31 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
-  if (!signUpData.session) {
-    redirect(
-      "/?error=" +
-        encodeURIComponent(
-          "Check your email to confirm your account, then sign in."
-        )
-    );
-  }
+  const userId = signUpData.user!.id;
 
-  const { error: userError } = await supabase.from("users").insert({
-    id: signUpData.user!.id,
+  /*
+   * IMPORTANT — same reasoning as owner signup:
+   *
+   * Do NOT branch on signUpData.session before writing the profile row.
+   *
+   * When email confirmation is enabled:
+   *
+   * user    = exists
+   * session = null
+   *
+   * The previous version of this action only inserted into public.users
+   * when a session was already present, so confirmation-required signups
+   * created an auth.users row with no matching public.users row — the
+   * tenant would confirm their email, log in, and find a blank profile
+   * with no dorm/room data. Using the server-side admin client here
+   * (bypasses RLS, doesn't require a session) writes the profile
+   * immediately regardless of confirmation state, exactly like
+   * signUpOwner already does.
+   */
+  const admin = createAdminClient();
+
+  const { error: userError } = await admin.from("users").insert({
+    id: userId,
     role: "tenant",
     full_name: fullName,
     email,
@@ -242,7 +257,29 @@ export async function signUpTenant(formData: FormData) {
   });
 
   if (userError) {
-    redirect("/signup/tenant?error=" + encodeURIComponent(userError.message));
+    // Clean up the orphaned auth account if the profile row couldn't be created.
+    await admin.auth.admin.deleteUser(userId);
+
+    redirect(
+      "/signup/tenant?error=" +
+        encodeURIComponent(
+          "Could not create tenant profile: " + userError.message
+        )
+    );
+  }
+
+  /*
+   * If email confirmation is enabled, the user has no session yet.
+   * Send them to sign in with a note to confirm their email first,
+   * instead of pretending they're already logged in.
+   */
+  if (!signUpData.session) {
+    redirect(
+      "/?success=" +
+        encodeURIComponent(
+          "Account created! Please check your email to confirm your account before signing in."
+        )
+    );
   }
 
   redirect("/tenant");

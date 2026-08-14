@@ -12,15 +12,18 @@ function ToastListenerInner() {
   useEffect(() => {
     const error = searchParams.get("error");
     const saved = searchParams.get("saved");
+    const success = searchParams.get("success");
 
-    if (!error && !saved) return;
+    if (!error && !saved && !success) return;
 
     if (error) toast.error(error);
     if (saved) toast.success("Saved.");
+    if (success) toast.success(success);
 
     const params = new URLSearchParams(searchParams.toString());
     params.delete("error");
     params.delete("saved");
+    params.delete("success");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
