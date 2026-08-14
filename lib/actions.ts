@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -58,11 +59,19 @@ export async function signUpOwner(formData: FormData) {
     redirect("/signup?error=" + encodeURIComponent("Fill in every field."));
   }
 
+  // Normal Supabase client — used for creating the Auth account
   const supabase = await createClient();
 
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        full_name: fullName,
+        dorm_name: dormName,
+        role: "owner",
+      },
+    },
   });
 
   if (signUpError || !signUpData.user) {
@@ -72,24 +81,27 @@ export async function signUpOwner(formData: FormData) {
     );
   }
 
-  if (!signUpData.session) {
-    // Email confirmation is required — no session yet, so we can't
-    // write RLS-protected rows as this user. Nothing has been
-    // written to public.users/dormitories yet; that happens the
-    // first time they land here with an active session. If you
-    // need this to work with confirmation required, that write has
-    // to move server-side with the service-role key instead.
-    redirect(
-      "/?error=" +
-        encodeURIComponent(
-          "Check your email to confirm your account, then sign in."
-        )
-    );
-  }
+  const userId = signUpData.user.id;
 
-  const userId = signUpData.user!.id;
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT check signUpData.session here.
+   *
+   * When email confirmation is enabled:
+   *
+   * user   = exists
+   * session = null
+   *
+   * So we can still create the application's
+   * public.users and public.dormitories records
+   * using the server-side admin client.
+   */
 
-  const { error: userError } = await supabase.from("users").insert({
+  const admin = createAdminClient();
+
+  // Create public.users record
+  const { error: userError } = await admin.from("users").insert({
     id: userId,
     role: "owner",
     full_name: fullName,
@@ -97,27 +109,74 @@ export async function signUpOwner(formData: FormData) {
   });
 
   if (userError) {
-    redirect("/signup?error=" + encodeURIComponent(userError.message));
+    // Optional cleanup:
+    // remove the Auth account if application profile creation failed.
+    await admin.auth.admin.deleteUser(userId);
+
+    redirect(
+      "/signup?error=" +
+        encodeURIComponent(
+          "Could not create owner profile: " + userError.message
+        )
+    );
   }
 
-  const { data: dorm, error: dormError } = await supabase
+  // Create dormitory
+  const { data: dorm, error: dormError } = await admin
     .from("dormitories")
-    .insert({ name: dormName, owner_id: userId })
+    .insert({
+      name: dormName,
+      owner_id: userId,
+    })
     .select("id")
     .single();
 
   if (dormError || !dorm) {
+    // Clean up the profile if dormitory creation fails
+    await admin.from("users").delete().eq("id", userId);
+
+    await admin.auth.admin.deleteUser(userId);
+
     redirect(
       "/signup?error=" +
         encodeURIComponent(dormError?.message ?? "Could not create dormitory.")
     );
   }
 
-  await supabase.from("users").update({ dorm_id: dorm!.id }).eq("id", userId);
+  // Connect owner to their dormitory
+  const { error: updateError } = await admin
+    .from("users")
+    .update({
+      dorm_id: dorm.id,
+    })
+    .eq("id", userId);
 
+  if (updateError) {
+    redirect(
+      "/signup?error=" +
+        encodeURIComponent(
+          "Dormitory was created but owner profile could not be updated: " +
+            updateError.message
+        )
+    );
+  }
+
+  /*
+   * If email confirmation is enabled, the user has no session yet.
+   * Therefore send them to a confirmation page instead of /admin.
+   */
+  if (!signUpData.session) {
+    redirect(
+      "/signup?success=" +
+        encodeURIComponent(
+          "Account created! Please check your email to confirm your account before signing in."
+        )
+    );
+  }
+
+  // If email confirmation is disabled, they already have a session.
   redirect("/admin");
 }
-
 // ---------- Tenant sign-up: joins an existing dormitory via its Dorm ID ----------
 export async function signUpTenant(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
