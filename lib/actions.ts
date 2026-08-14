@@ -41,12 +41,13 @@ export async function logout() {
   redirect("/");
 }
 
-// ---------- Owner sign-up: creates the account AND the dormitory ----------
-// The `users` and `dormitories` rows are created by a DB trigger
-// (handle_new_signup) reading auth metadata below — not by client inserts.
-// This keeps sign-up working whether or not Supabase email confirmation is
-// enabled, since client inserts would otherwise need a session that doesn't
-// exist yet pre-confirmation.
+// ---------- Owner sign-up: creates the auth account, THEN
+// explicitly writes public.users + public.dormitories ----------
+// No DB trigger involved. This only runs once a session exists
+// (i.e. email confirmation is off, or already satisfied) because
+// the inserts below run as the signed-in user and are subject to
+// RLS (see 0004_explicit_signup.sql for the policies that allow
+// "insert your own row").
 export async function signUpOwner(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
   const dormName = String(formData.get("dormName") ?? "").trim();
@@ -62,9 +63,6 @@ export async function signUpOwner(formData: FormData) {
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: { role: "owner", full_name: fullName, dorm_name: dormName },
-    },
   });
 
   if (signUpError || !signUpData.user) {
@@ -75,8 +73,12 @@ export async function signUpOwner(formData: FormData) {
   }
 
   if (!signUpData.session) {
-    // Email confirmation is required — no session yet, nothing to redirect
-    // into behind the middleware's auth check.
+    // Email confirmation is required — no session yet, so we can't
+    // write RLS-protected rows as this user. Nothing has been
+    // written to public.users/dormitories yet; that happens the
+    // first time they land here with an active session. If you
+    // need this to work with confirmation required, that write has
+    // to move server-side with the service-role key instead.
     redirect(
       "/?error=" +
         encodeURIComponent(
@@ -84,6 +86,34 @@ export async function signUpOwner(formData: FormData) {
         )
     );
   }
+
+  const userId = signUpData.user!.id;
+
+  const { error: userError } = await supabase.from("users").insert({
+    id: userId,
+    role: "owner",
+    full_name: fullName,
+    email,
+  });
+
+  if (userError) {
+    redirect("/signup?error=" + encodeURIComponent(userError.message));
+  }
+
+  const { data: dorm, error: dormError } = await supabase
+    .from("dormitories")
+    .insert({ name: dormName, owner_id: userId })
+    .select("id")
+    .single();
+
+  if (dormError || !dorm) {
+    redirect(
+      "/signup?error=" +
+        encodeURIComponent(dormError?.message ?? "Could not create dormitory.")
+    );
+  }
+
+  await supabase.from("users").update({ dorm_id: dorm!.id }).eq("id", userId);
 
   redirect("/admin");
 }
@@ -120,22 +150,11 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
-  // matches[0].id confirms the code is valid; the actual dorm_id used for
-  // the new user is re-resolved server-side from dormCode by the trigger,
-  // so a tampered dorm_id can never be smuggled in via client metadata.
-  void matches;
+  const dormId = matches![0].id;
 
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: {
-        role: "tenant",
-        full_name: fullName,
-        phone,
-        dorm_code: dormCode,
-      },
-    },
   });
 
   if (signUpError || !signUpData.user) {
@@ -154,7 +173,51 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
+  const { error: userError } = await supabase.from("users").insert({
+    id: signUpData.user!.id,
+    role: "tenant",
+    full_name: fullName,
+    email,
+    phone: phone || null,
+    dorm_id: dormId,
+  });
+
+  if (userError) {
+    redirect("/signup/tenant?error=" + encodeURIComponent(userError.message));
+  }
+
   redirect("/tenant");
+}
+
+// ---------- Tenant profile: phone + emergency contact ----------
+export async function updateTenantProfile(formData: FormData) {
+  const session = await getSessionUser();
+  if (!session) redirect("/");
+
+  const phone = String(formData.get("phone") ?? "").trim();
+  const emergencyContactName = String(
+    formData.get("emergencyContactName") ?? ""
+  ).trim();
+  const emergencyContactNumber = String(
+    formData.get("emergencyContactNumber") ?? ""
+  ).trim();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("users")
+    .update({
+      phone: phone || null,
+      emergency_contact_name: emergencyContactName || null,
+      emergency_contact_number: emergencyContactNumber || null,
+    })
+    .eq("id", session.user.id);
+
+  if (error) {
+    redirect("/tenant?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/tenant");
+  redirect("/tenant?saved=1");
 }
 
 // ============================================================
@@ -327,40 +390,4 @@ export async function removeTenantFromRoom(formData: FormData) {
 
   revalidatePath("/admin/rooms");
   redirect("/admin/rooms");
-}
-
-// ============================================================
-// Append this to lib/actions.ts (imports already present in that
-// file cover everything this needs: redirect, revalidatePath,
-// createClient, getSessionUser).
-// ============================================================
-
-export async function updateTenantProfile(formData: FormData) {
-  const session = await getSessionUser();
-  if (!session) redirect("/");
-
-  const phone = String(formData.get("phone") ?? "").trim();
-  const emergencyContactName = String(
-    formData.get("emergencyContactName") ?? ""
-  ).trim();
-  const emergencyContactNumber = String(
-    formData.get("emergencyContactNumber") ?? ""
-  ).trim();
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("users")
-    .update({
-      phone: phone || null,
-      emergency_contact_name: emergencyContactName || null,
-      emergency_contact_number: emergencyContactNumber || null,
-    })
-    .eq("id", session.user.id);
-
-  if (error) {
-    redirect("/tenant?error=" + encodeURIComponent(error.message));
-  }
-
-  revalidatePath("/tenant");
-  redirect("/tenant?saved=1");
 }
