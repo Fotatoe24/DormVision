@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
 
   // Protect the /admin and /tenant route groups — redirect unauthenticated
   // users to the login screen, which lives at the app root.
-  const protectedPrefixes = ["/admin", "/tenant"];
+  const protectedPrefixes = ["/admin", "/tenant", "/profile"];
   const isProtected = protectedPrefixes.some((p) =>
     request.nextUrl.pathname.startsWith(p)
   );

@@ -1,4 +1,6 @@
 import { logout } from "@/lib/actions";
+import Link from "next/link";
+import { Settings, User, LogOut } from "lucide-react";
 
 export function TenantTopbar({ dormName }: { dormName?: string }) {
   return (
@@ -12,14 +14,41 @@ export function TenantTopbar({ dormName }: { dormName?: string }) {
             My DormVision
           </p>
         </div>
-        <form action={logout}>
+
+        {/* Settings Dropdown */}
+        <div className="group relative">
           <button
-            type="submit"
-            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
+            type="button"
+            className="flex items-center justify-center rounded-md border border-border bg-background p-2 text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+            aria-label="Settings"
           >
-            Sign out
+            <Settings className="h-4 w-4" />
           </button>
-        </form>
+
+          <div className="invisible absolute right-0 top-full z-50 w-44 pt-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100">
+            <div className="rounded-lg border border-border bg-surface p-1.5 shadow-lg">
+              {/* Profile */}
+              <Link
+                href="/profile"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+              >
+                <User className="h-4 w-4" />
+                Profile
+              </Link>
+
+              {/* Sign out */}
+              <form action={logout}>
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
   );

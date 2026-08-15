@@ -10,6 +10,8 @@ export function PasswordInput({
   minLength,
   placeholder,
   className,
+  value,
+  onChange,
 }: {
   id: string;
   name: string;
@@ -18,6 +20,8 @@ export function PasswordInput({
   minLength?: number;
   placeholder?: string;
   className?: string;
+  value?: string;
+  onChange?: (value: string) => void;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -31,6 +35,8 @@ export function PasswordInput({
         required={required}
         minLength={minLength}
         placeholder={placeholder}
+        value={value}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         className={`${className ?? ""} pr-10`}
       />
       <button
