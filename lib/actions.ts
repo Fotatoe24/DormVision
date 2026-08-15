@@ -177,7 +177,6 @@ export async function signUpOwner(formData: FormData) {
   // If email confirmation is disabled, they already have a session.
   redirect("/admin");
 }
-
 // ---------- Tenant sign-up: joins an existing dormitory via its Dorm ID ----------
 export async function signUpTenant(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
@@ -224,27 +223,17 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
-  const userId = signUpData.user!.id;
+  if (!signUpData.session) {
+    redirect(
+      "/?error=" +
+        encodeURIComponent(
+          "Check your email to confirm your account, then sign in."
+        )
+    );
+  }
 
-  /*
-   * IMPORTANT — same reasoning as owner signup:
-   *
-   * Do NOT branch on signUpData.session before writing the profile rows.
-   *
-   * When email confirmation is enabled:
-   *
-   * user    = exists
-   * session = null
-   *
-   * Using the server-side admin client here (bypasses RLS, doesn't
-   * require a session) writes both rows immediately regardless of
-   * confirmation state, exactly like signUpOwner already does.
-   */
-  const admin = createAdminClient();
-
-  // public.users — the application auth profile (role, credentials link)
-  const { error: userError } = await admin.from("users").insert({
-    id: userId,
+  const { error: userError } = await supabase.from("users").insert({
+    id: signUpData.user!.id,
     role: "tenant",
     full_name: fullName,
     email,
@@ -253,53 +242,7 @@ export async function signUpTenant(formData: FormData) {
   });
 
   if (userError) {
-    // Clean up the orphaned auth account if the profile row couldn't be created.
-    await admin.auth.admin.deleteUser(userId);
-
-    redirect(
-      "/signup/tenant?error=" +
-        encodeURIComponent(
-          "Could not create tenant profile: " + userError.message
-        )
-    );
-  }
-
-  // public.tenants — the occupancy record (room assignment, move-in/out,
-  // status). room_id stays null here; an owner assigns a room later from
-  // /admin/rooms.
-  const { error: tenantError } = await admin.from("tenants").insert({
-    profile_id: userId,
-    dorm_id: dormId,
-    full_name: fullName,
-    contact_number: phone || null,
-  });
-
-  if (tenantError) {
-    // Roll back the users row too, so we never leave a users row with no
-    // matching tenants row.
-    await admin.from("users").delete().eq("id", userId);
-    await admin.auth.admin.deleteUser(userId);
-
-    redirect(
-      "/signup/tenant?error=" +
-        encodeURIComponent(
-          "Could not create tenant record: " + tenantError.message
-        )
-    );
-  }
-
-  /*
-   * If email confirmation is enabled, the user has no session yet.
-   * Send them to sign in with a note to confirm their email first,
-   * instead of pretending they're already logged in.
-   */
-  if (!signUpData.session) {
-    redirect(
-      "/?success=" +
-        encodeURIComponent(
-          "Account created! Please check your email to confirm your account before signing in."
-        )
-    );
+    redirect("/signup/tenant?error=" + encodeURIComponent(userError.message));
   }
 
   redirect("/tenant");
@@ -367,10 +310,9 @@ async function syncRoomStatus(
   if (!room || room.status === "maintenance") return;
 
   const { count } = await supabase
-    .from("tenants")
+    .from("users")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId)
-    .eq("status", "active");
+    .eq("room_id", roomId);
 
   const nextStatus = (count ?? 0) >= room.capacity ? "full" : "available";
 
@@ -432,10 +374,9 @@ export async function deleteRoom(formData: FormData) {
   const supabase = await createClient();
 
   const { count } = await supabase
-    .from("tenants")
+    .from("users")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId)
-    .eq("status", "active");
+    .eq("room_id", roomId);
 
   if ((count ?? 0) > 0) {
     redirect(
@@ -470,10 +411,9 @@ export async function assignTenantToRoom(formData: FormData) {
     .single();
 
   const { count } = await supabase
-    .from("tenants")
+    .from("users")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId)
-    .eq("status", "active");
+    .eq("room_id", roomId);
 
   if (room && (count ?? 0) >= room.capacity) {
     redirect(
@@ -481,21 +421,13 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
-  // `tenants` is the only table that actually has a room_id column —
-  // `users` never had one, despite earlier code assuming otherwise.
-  // tenantId here is users.id, which equals tenants.profile_id. Treat
-  // every assignment as a move-in: clear any prior move-out and
-  // reactivate the record, so re-assigning a previously-removed tenant
-  // doesn't leave stale 'inactive'/move_out_date data behind.
-  const { error: tenantSyncError } = await supabase
-    .from("tenants")
-    .update({ room_id: roomId, status: "active", move_out_date: null })
-    .eq("profile_id", tenantId);
+  const { error } = await supabase
+    .from("users")
+    .update({ room_id: roomId })
+    .eq("id", tenantId);
 
-  if (tenantSyncError) {
-    redirect(
-      "/admin/rooms?error=" + encodeURIComponent(tenantSyncError.message)
-    );
+  if (error) {
+    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
   }
 
   await syncRoomStatus(supabase, roomId);
@@ -511,26 +443,266 @@ export async function removeTenantFromRoom(formData: FormData) {
   if (!tenantId) redirect("/admin/rooms");
 
   const supabase = await createClient();
-
-  // `tenants` is the only table that actually has a room_id column.
-  // Removal counts as a move-out.
-  const { error: tenantSyncError } = await supabase
-    .from("tenants")
-    .update({
-      room_id: null,
-      status: "inactive",
-      move_out_date: new Date().toISOString().slice(0, 10),
-    })
-    .eq("profile_id", tenantId);
-
-  if (tenantSyncError) {
-    redirect(
-      "/admin/rooms?error=" + encodeURIComponent(tenantSyncError.message)
-    );
-  }
+  await supabase.from("users").update({ room_id: null }).eq("id", tenantId);
 
   if (roomId) await syncRoomStatus(supabase, roomId);
 
   revalidatePath("/admin/rooms");
   redirect("/admin/rooms");
+}
+
+// ============================================================
+// Phase 2 — Digital Billing
+// ============================================================
+
+// Computes the current calendar-month billing period and a due date
+// on the 5th of the month. Adjust `dueDayOfMonth` if a different
+// house rule is needed later.
+function currentBillingPeriod() {
+  const now = new Date();
+  const dueDayOfMonth = 5;
+
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const due = new Date(now.getFullYear(), now.getMonth(), dueDayOfMonth);
+
+  const toISO = (d: Date) => d.toISOString().slice(0, 10);
+
+  return {
+    start: toISO(start),
+    end: toISO(end),
+    due: toISO(due),
+  };
+}
+
+// Auto-generates one bill per room-assigned tenant for the current
+// calendar month, using each tenant's room's monthly_rate. Tenants who
+// already have a bill for this period are skipped (the unique index on
+// (tenant_id, billing_period_start) is the hard backstop against
+// duplicates if this ever runs twice).
+export async function generateMonthlyBills() {
+  const dormId = await requireOwnerDormId();
+  const supabase = await createClient();
+  const { start, end, due } = currentBillingPeriod();
+
+  const { data: tenants } = await supabase
+    .from("users")
+    .select("id, room_id")
+    .eq("dorm_id", dormId)
+    .eq("role", "tenant")
+    .not("room_id", "is", null);
+
+  if (!tenants || tenants.length === 0) {
+    redirect(
+      "/admin/billing?error=" +
+        encodeURIComponent("No tenants with an assigned room to bill.")
+    );
+  }
+
+  const roomIds = [...new Set(tenants!.map((t) => t.room_id as string))];
+
+  const { data: rooms } = await supabase
+    .from("rooms")
+    .select("id, monthly_rate")
+    .in("id", roomIds);
+
+  const rateByRoom = new Map(
+    (rooms ?? []).map((r) => [r.id, Number(r.monthly_rate)])
+  );
+
+  const { data: existing } = await supabase
+    .from("bills")
+    .select("tenant_id")
+    .eq("dorm_id", dormId)
+    .eq("billing_period_start", start);
+
+  const alreadyBilled = new Set((existing ?? []).map((b) => b.tenant_id));
+
+  const rows = tenants!
+    .filter((t) => !alreadyBilled.has(t.id))
+    .map((t) => ({
+      dorm_id: dormId,
+      tenant_id: t.id,
+      room_id: t.room_id,
+      billing_period_start: start,
+      billing_period_end: end,
+      due_date: due,
+      rent_amount: rateByRoom.get(t.room_id as string) ?? 0,
+      other_charges: 0,
+    }));
+
+  if (rows.length === 0) {
+    redirect(
+      "/admin/billing?error=" +
+        encodeURIComponent(
+          "Every tenant already has a bill for this billing period."
+        )
+    );
+  }
+
+  const { error } = await supabase.from("bills").insert(rows);
+
+  if (error) {
+    redirect("/admin/billing?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/admin/billing");
+  redirect(
+    "/admin/billing?saved=" +
+      encodeURIComponent(`Generated ${rows.length} bill(s).`)
+  );
+}
+
+// Manual bill creation, for one-off charges or tenants the auto-generator
+// didn't cover (e.g. mid-month move-ins, custom periods).
+export async function createBill(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const billingPeriodStart = String(formData.get("billingPeriodStart") ?? "");
+  const billingPeriodEnd = String(formData.get("billingPeriodEnd") ?? "");
+  const dueDate = String(formData.get("dueDate") ?? "");
+  const rentAmount = Number(formData.get("rentAmount"));
+  const otherCharges = Number(formData.get("otherCharges") ?? 0);
+  const chargesNote = String(formData.get("chargesNote") ?? "").trim();
+
+  if (
+    !tenantId ||
+    !billingPeriodStart ||
+    !billingPeriodEnd ||
+    !dueDate ||
+    !Number.isFinite(rentAmount)
+  ) {
+    redirect(
+      "/admin/billing?error=" +
+        encodeURIComponent(
+          "Fill in the tenant, billing period, due date, and rent amount."
+        )
+    );
+  }
+
+  const supabase = await createClient();
+
+  const { data: tenant } = await supabase
+    .from("users")
+    .select("room_id, dorm_id")
+    .eq("id", tenantId)
+    .single();
+
+  if (!tenant || tenant.dorm_id !== dormId) {
+    redirect("/admin/billing?error=" + encodeURIComponent("Tenant not found."));
+  }
+
+  const { error } = await supabase.from("bills").insert({
+    dorm_id: dormId,
+    tenant_id: tenantId,
+    room_id: tenant!.room_id,
+    billing_period_start: billingPeriodStart,
+    billing_period_end: billingPeriodEnd,
+    due_date: dueDate,
+    rent_amount: rentAmount,
+    other_charges: Number.isFinite(otherCharges) ? otherCharges : 0,
+    charges_note: chargesNote || null,
+  });
+
+  if (error) {
+    redirect("/admin/billing?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/admin/billing");
+  redirect("/admin/billing?saved=1");
+}
+
+// Edits the charges/due date on an existing bill (not the payment side —
+// use recordPayment for that).
+export async function updateBill(formData: FormData) {
+  await requireOwnerDormId();
+  const billId = String(formData.get("billId") ?? "");
+  const dueDate = String(formData.get("dueDate") ?? "");
+  const rentAmount = Number(formData.get("rentAmount"));
+  const otherCharges = Number(formData.get("otherCharges") ?? 0);
+  const chargesNote = String(formData.get("chargesNote") ?? "").trim();
+
+  if (!billId || !dueDate || !Number.isFinite(rentAmount)) {
+    redirect(
+      "/admin/billing?error=" + encodeURIComponent("Invalid bill update.")
+    );
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bills")
+    .update({
+      due_date: dueDate,
+      rent_amount: rentAmount,
+      other_charges: Number.isFinite(otherCharges) ? otherCharges : 0,
+      charges_note: chargesNote || null,
+    })
+    .eq("id", billId);
+
+  if (error) {
+    redirect("/admin/billing?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/admin/billing");
+  redirect("/admin/billing?saved=1");
+}
+
+// Owner manually records a payment against a bill. Recomputes amount_paid
+// and status server-side rather than trusting a client-computed status.
+export async function recordPayment(formData: FormData) {
+  await requireOwnerDormId();
+  const billId = String(formData.get("billId") ?? "");
+  const amount = Number(formData.get("amount"));
+
+  if (!billId || !Number.isFinite(amount) || amount <= 0) {
+    redirect(
+      "/admin/billing?error=" +
+        encodeURIComponent("Enter a valid payment amount.")
+    );
+  }
+
+  const supabase = await createClient();
+
+  const { data: bill } = await supabase
+    .from("bills")
+    .select("amount_paid, total_amount")
+    .eq("id", billId)
+    .single();
+
+  if (!bill) {
+    redirect("/admin/billing?error=" + encodeURIComponent("Bill not found."));
+  }
+
+  const newAmountPaid = Number(bill!.amount_paid) + amount;
+  const status: "unpaid" | "partial" | "paid" =
+    newAmountPaid >= Number(bill!.total_amount)
+      ? "paid"
+      : newAmountPaid > 0
+      ? "partial"
+      : "unpaid";
+
+  const { error } = await supabase
+    .from("bills")
+    .update({ amount_paid: newAmountPaid, status })
+    .eq("id", billId);
+
+  if (error) {
+    redirect("/admin/billing?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/admin/billing");
+  revalidatePath("/tenant");
+  redirect("/admin/billing?saved=1");
+}
+
+export async function deleteBill(formData: FormData) {
+  await requireOwnerDormId();
+  const billId = String(formData.get("billId") ?? "");
+  if (!billId) redirect("/admin/billing");
+
+  const supabase = await createClient();
+  await supabase.from("bills").delete().eq("id", billId);
+
+  revalidatePath("/admin/billing");
+  redirect("/admin/billing");
 }
