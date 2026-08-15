@@ -26,7 +26,7 @@ export default async function AdminSettingsPage() {
     supabase.from("dormitories").select("id, name").eq("id", dormId).single(),
 
     supabase
-      .from("dormitory_settings")
+      .from("dorm_settings")
       .select(
         `
         id,
