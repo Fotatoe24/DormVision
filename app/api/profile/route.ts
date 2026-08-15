@@ -81,13 +81,17 @@ export async function PATCH(request: Request) {
   }
 
   // ---------- Contact details (phone + emergency contact) ----------
+  // Lives on `tenants`, not `users` — that's where contact_number and
+  // emergency_contact_name/number actually are, keyed by profile_id.
   if (
     phone !== undefined ||
     emergencyContactName !== undefined ||
     emergencyContactNumber !== undefined
   ) {
     const contactUpdates: Record<string, unknown> = {};
-    if (phone !== undefined) contactUpdates.phone = phone.trim() || null;
+    if (phone !== undefined) {
+      contactUpdates.contact_number = phone.trim() || null;
+    }
     if (emergencyContactName !== undefined) {
       contactUpdates.emergency_contact_name =
         emergencyContactName.trim() || null;
@@ -99,9 +103,9 @@ export async function PATCH(request: Request) {
 
     const admin = createAdminClient();
     const { error } = await admin
-      .from("users")
+      .from("tenants")
       .update(contactUpdates)
-      .eq("id", session.user.id);
+      .eq("profile_id", session.user.id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

@@ -12,7 +12,7 @@ export default async function ProfilePage() {
   const { data: me } = await supabase
     .from("users")
     .select(
-      "full_name, email, role, avatar_url, avatar_color, created_at, dorm_id, phone, emergency_contact_name, emergency_contact_number"
+      "full_name, email, role, avatar_url, avatar_color, created_at, dorm_id"
     )
     .eq("id", session.user.id)
     .single();
@@ -27,6 +27,19 @@ export default async function ProfilePage() {
         .maybeSingle()
     : { data: null };
 
+  // Contact details live on `tenants`, not `users` — owners don't have a
+  // tenants row at all, so only fetch this for tenants.
+  const { data: tenantRecord } =
+    me.role === "tenant"
+      ? await supabase
+          .from("tenants")
+          .select(
+            "contact_number, emergency_contact_name, emergency_contact_number"
+          )
+          .eq("profile_id", session.user.id)
+          .maybeSingle()
+      : { data: null };
+
   return (
     <ProfileView
       user={{
@@ -38,9 +51,9 @@ export default async function ProfilePage() {
         avatarUrl: me.avatar_url,
         createdAt: me.created_at,
         dormName: dorm?.name,
-        phone: me.phone,
-        emergencyContactName: me.emergency_contact_name,
-        emergencyContactNumber: me.emergency_contact_number,
+        phone: tenantRecord?.contact_number ?? null,
+        emergencyContactName: tenantRecord?.emergency_contact_name ?? null,
+        emergencyContactNumber: tenantRecord?.emergency_contact_number ?? null,
       }}
     />
   );
