@@ -24,25 +24,38 @@ export default async function TenantPage({
   const { data: me } = await supabase
     .from("users")
     .select(
-      "full_name, email, phone, room_id, dorm_id, emergency_contact_name, emergency_contact_number"
+      "full_name, email, phone, emergency_contact_name, emergency_contact_number"
     )
     .eq("id", session.user.id)
     .single();
 
-  const { data: room } = me?.room_id
+  // Room assignment now lives on `tenants`, not `users.room_id` — that's
+  // the field assignTenantToRoom/removeTenantFromRoom keep in sync.
+  const { data: myTenantRecord } = await supabase
+    .from("tenants")
+    .select("room_id")
+    .eq("profile_id", session.user.id)
+    .single();
+
+  const roomId = myTenantRecord?.room_id ?? null;
+
+  const { data: room } = roomId
     ? await supabase
         .from("rooms")
         .select("room_number, monthly_rate")
-        .eq("id", me.room_id)
+        .eq("id", roomId)
         .single()
     : { data: null };
 
-  const { data: roommates } = me?.room_id
+  // Roommates: other active tenants sharing the same room. `tenants` has
+  // its own full_name column, so no join back to `users` is needed here.
+  const { data: roommates } = roomId
     ? await supabase
-        .from("users")
+        .from("tenants")
         .select("id, full_name")
-        .eq("room_id", me.room_id)
-        .neq("id", session.user.id)
+        .eq("room_id", roomId)
+        .eq("status", "active")
+        .neq("profile_id", session.user.id)
     : { data: [] };
 
   return (

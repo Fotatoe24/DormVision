@@ -367,9 +367,10 @@ async function syncRoomStatus(
   if (!room || room.status === "maintenance") return;
 
   const { count } = await supabase
-    .from("users")
+    .from("tenants")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId);
+    .eq("room_id", roomId)
+    .eq("status", "active");
 
   const nextStatus = (count ?? 0) >= room.capacity ? "full" : "available";
 
@@ -431,9 +432,10 @@ export async function deleteRoom(formData: FormData) {
   const supabase = await createClient();
 
   const { count } = await supabase
-    .from("users")
+    .from("tenants")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId);
+    .eq("room_id", roomId)
+    .eq("status", "active");
 
   if ((count ?? 0) > 0) {
     redirect(
@@ -468,9 +470,10 @@ export async function assignTenantToRoom(formData: FormData) {
     .single();
 
   const { count } = await supabase
-    .from("users")
+    .from("tenants")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId);
+    .eq("room_id", roomId)
+    .eq("status", "active");
 
   if (room && (count ?? 0) >= room.capacity) {
     redirect(
@@ -478,13 +481,21 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
-  const { error } = await supabase
-    .from("users")
-    .update({ room_id: roomId })
-    .eq("id", tenantId);
+  // `tenants` is the only table that actually has a room_id column —
+  // `users` never had one, despite earlier code assuming otherwise.
+  // tenantId here is users.id, which equals tenants.profile_id. Treat
+  // every assignment as a move-in: clear any prior move-out and
+  // reactivate the record, so re-assigning a previously-removed tenant
+  // doesn't leave stale 'inactive'/move_out_date data behind.
+  const { error: tenantSyncError } = await supabase
+    .from("tenants")
+    .update({ room_id: roomId, status: "active", move_out_date: null })
+    .eq("profile_id", tenantId);
 
-  if (error) {
-    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+  if (tenantSyncError) {
+    redirect(
+      "/admin/rooms?error=" + encodeURIComponent(tenantSyncError.message)
+    );
   }
 
   await syncRoomStatus(supabase, roomId);
@@ -500,7 +511,23 @@ export async function removeTenantFromRoom(formData: FormData) {
   if (!tenantId) redirect("/admin/rooms");
 
   const supabase = await createClient();
-  await supabase.from("users").update({ room_id: null }).eq("id", tenantId);
+
+  // `tenants` is the only table that actually has a room_id column.
+  // Removal counts as a move-out.
+  const { error: tenantSyncError } = await supabase
+    .from("tenants")
+    .update({
+      room_id: null,
+      status: "inactive",
+      move_out_date: new Date().toISOString().slice(0, 10),
+    })
+    .eq("profile_id", tenantId);
+
+  if (tenantSyncError) {
+    redirect(
+      "/admin/rooms?error=" + encodeURIComponent(tenantSyncError.message)
+    );
+  }
 
   if (roomId) await syncRoomStatus(supabase, roomId);
 

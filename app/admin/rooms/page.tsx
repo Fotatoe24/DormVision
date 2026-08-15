@@ -45,22 +45,48 @@ export default async function RoomsPage({
     .eq("dorm_id", dormId)
     .order("room_number");
 
-  const { data: tenants } = await supabase
-    .from("users")
-    .select("id, full_name, email, room_id")
+  // Dual-read tenant occupancy from `tenants` (the source of truth for
+  // move-in/move-out state) instead of `users`. `tenants` has no email
+  // column, so pull email from `users` via a profile_id -> id join map.
+  const { data: tenantRecords } = await supabase
+    .from("tenants")
+    .select("id, profile_id, full_name, room_id, status")
     .eq("dorm_id", dormId)
-    .eq("role", "tenant")
+    .eq("status", "active")
     .order("full_name");
+
+  const profileIds = (tenantRecords ?? [])
+    .map((t) => t.profile_id)
+    .filter((id): id is string => Boolean(id));
+
+  const { data: tenantUsers } = profileIds.length
+    ? await supabase.from("users").select("id, email").in("id", profileIds)
+    : { data: [] as { id: string; email: string }[] };
+
+  const emailByProfileId = new Map(
+    (tenantUsers ?? []).map((u) => [u.id, u.email])
+  );
+
+  // Downstream code keys tenants by `id` and passes that id as `tenantId`
+  // to assignTenantToRoom/removeTenantFromRoom, which expect users.id
+  // (== tenants.profile_id) — so `id` here stays profile_id, not the
+  // tenants table's own row id.
+  const tenants = (tenantRecords ?? []).map((t) => ({
+    id: t.profile_id as string,
+    full_name: t.full_name,
+    email: emailByProfileId.get(t.profile_id as string) ?? "",
+    room_id: t.room_id,
+  }));
 
   const tenantsByRoom = new Map<string, typeof tenants>();
   const unassigned: typeof tenants = [];
-  for (const t of tenants ?? []) {
+  for (const t of tenants) {
     if (t.room_id) {
       const list = tenantsByRoom.get(t.room_id) ?? [];
       list.push(t);
       tenantsByRoom.set(t.room_id, list);
     } else {
-      unassigned!.push(t);
+      unassigned.push(t);
     }
   }
 
@@ -182,12 +208,12 @@ export default async function RoomsPage({
                 <div className="mb-3 space-y-1.5">
                   {occupants.map((t) => (
                     <div
-                      key={t!.id}
+                      key={t.id}
                       className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-1.5"
                     >
-                      <span className="text-xs">{t!.full_name}</span>
+                      <span className="text-xs">{t.full_name}</span>
                       <form action={removeTenantFromRoom}>
-                        <input type="hidden" name="tenantId" value={t!.id} />
+                        <input type="hidden" name="tenantId" value={t.id} />
                         <input type="hidden" name="roomId" value={room.id} />
                         <button
                           type="submit"
@@ -249,20 +275,20 @@ export default async function RoomsPage({
         <div className="border-b border-border px-4 py-3 text-sm font-heading font-semibold">
           Unassigned tenants
         </div>
-        {unassigned && unassigned.length > 0 ? (
+        {unassigned.length > 0 ? (
           <div>
             {unassigned.map((t, i) => (
               <form
                 action={assignTenantToRoom}
-                key={t!.id}
+                key={t.id}
                 className={`flex items-center justify-between gap-3 px-4 py-3 ${
                   i < unassigned.length - 1 ? "border-b border-border" : ""
                 }`}
               >
-                <input type="hidden" name="tenantId" value={t!.id} />
+                <input type="hidden" name="tenantId" value={t.id} />
                 <div>
-                  <p className="text-sm font-medium">{t!.full_name}</p>
-                  <p className="text-xs text-foreground-muted">{t!.email}</p>
+                  <p className="text-sm font-medium">{t.full_name}</p>
+                  <p className="text-xs text-foreground-muted">{t.email}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
