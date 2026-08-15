@@ -8,14 +8,15 @@ import { logout } from "@/lib/actions";
 import { ArrowLeft } from "lucide-react";
 
 const AVATAR_COLORS = [
-  "#1f4d3d", // primary (ledger green)
-  "#b8863b", // accent (brass)
-  "#4b7a5e", // status-paid
-  "#c99a3e", // status-partial
-  "#8b8378", // status-unpaid
-  "#b14833", // status-overdue
-  "#1b1f1d", // ink
+  "#1f4d3d",
+  "#b8863b",
+  "#4b7a5e",
+  "#c99a3e",
+  "#8b8378",
+  "#b14833",
+  "#1b1f1d",
 ];
+
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
 
 function initials(name: string) {
@@ -25,15 +26,6 @@ function initials(name: string) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 type ProfileUser = {
@@ -57,6 +49,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   const [fullName, setFullName] = useState(user.fullName);
   const [avatarColor, setAvatarColor] = useState(user.avatarColor);
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl);
+
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingInfo, setSavingInfo] = useState(false);
 
@@ -74,135 +67,233 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   );
   const [savingContact, setSavingContact] = useState(false);
 
+  // ---------------------------------------------------------
+  // Upload profile photo
+  // ---------------------------------------------------------
+
   async function handlePhoto(file: File | undefined) {
     if (!file) return;
+
     if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file");
+      toast.error("Please choose an image file.");
       return;
     }
+
     if (file.size > MAX_AVATAR_BYTES) {
-      toast.error("Photo is too large — the limit is 3MB");
+      toast.error("Photo is too large — the limit is 3MB.");
       return;
     }
 
     setUploadingPhoto(true);
+
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const formData = new FormData();
+      formData.append("avatar", file);
+
       const res = await fetch("/api/profile", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: dataUrl }),
+        body: formData,
       });
-      const j = await res.json().catch(() => ({}));
+
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        toast.error(j.error ?? "Couldn't update your photo");
+        toast.error(data.error ?? "Couldn't update your photo.");
         return;
       }
-      setAvatarUrl(dataUrl);
-      toast.success("Profile photo updated");
+
+      setAvatarUrl(data.avatarUrl ?? null);
+
+      toast.success("Profile photo updated.");
+
       router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong while uploading your photo.");
     } finally {
       setUploadingPhoto(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   }
+
+  // ---------------------------------------------------------
+  // Remove profile photo
+  // ---------------------------------------------------------
 
   async function removePhoto() {
     setUploadingPhoto(true);
+
     try {
       const res = await fetch("/api/profile", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: null }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          removeAvatar: true,
+        }),
       });
+
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        toast.error("Couldn't remove your photo");
+        toast.error(data.error ?? "Couldn't remove your photo.");
         return;
       }
+
       setAvatarUrl(null);
-      toast.success("Profile photo removed");
+
+      toast.success("Profile photo removed.");
+
       router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong while removing your photo.");
     } finally {
       setUploadingPhoto(false);
     }
   }
 
+  // ---------------------------------------------------------
+  // Save name + avatar color
+  // ---------------------------------------------------------
+
   async function saveInfo() {
     setSavingInfo(true);
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName, avatarColor }),
-    });
-    const j = await res.json().catch(() => ({}));
-    setSavingInfo(false);
-    if (!res.ok) {
-      toast.error(j.error ?? "Couldn't save your info");
-      return;
+
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fullName,
+          avatarColor,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Couldn't save your info.");
+        return;
+      }
+
+      toast.success("Profile updated.");
+
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong while saving your profile.");
+    } finally {
+      setSavingInfo(false);
     }
-    toast.success("Profile updated");
-    router.refresh();
   }
+
+  // ---------------------------------------------------------
+  // Save contact details
+  // ---------------------------------------------------------
 
   async function saveContact() {
     setSavingContact(true);
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        phone,
-        emergencyContactName,
-        emergencyContactNumber,
-      }),
-    });
-    const j = await res.json().catch(() => ({}));
-    setSavingContact(false);
-    if (!res.ok) {
-      toast.error(j.error ?? "Couldn't save your contact details");
-      return;
+
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phone,
+          emergencyContactName,
+          emergencyContactNumber,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Couldn't save your contact details.");
+        return;
+      }
+
+      toast.success("Contact details saved.");
+
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong while saving your contact details.");
+    } finally {
+      setSavingContact(false);
     }
-    toast.success("Contact details saved");
-    router.refresh();
   }
+
+  // ---------------------------------------------------------
+  // Change password
+  // ---------------------------------------------------------
 
   async function changePassword() {
     if (!currentPassword) {
-      toast.error("Enter your current password");
+      toast.error("Enter your current password.");
       return;
     }
+
     if (newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters");
+      toast.error("New password must be at least 6 characters.");
       return;
     }
+
     if (newPassword !== confirmPassword) {
-      toast.error("New passwords don't match");
+      toast.error("New passwords don't match.");
       return;
     }
 
     setSavingPassword(true);
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    const j = await res.json().catch(() => ({}));
-    setSavingPassword(false);
-    if (!res.ok) {
-      toast.error(j.error ?? "Couldn't change your password");
-      return;
+
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Couldn't change your password.");
+        return;
+      }
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+
+      toast.success("Password changed.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong while changing your password.");
+    } finally {
+      setSavingPassword(false);
     }
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    toast.success("Password changed");
   }
 
   const inputClass =
     "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
+
   const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
+      {/* Header */}
       <div className="mb-6 flex items-center gap-3">
         <button
           type="button"
@@ -217,6 +308,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
         <div>
           <p className="text-xs text-foreground-muted">Account</p>
+
           <h1 className="font-heading text-lg font-semibold text-primary">
             Profile settings
           </h1>
@@ -229,10 +321,11 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             className="hidden"
             onChange={(e) => handlePhoto(e.target.files?.[0])}
           />
+
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -243,27 +336,34 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           ) : (
             <span
               className="grid h-16 w-16 place-items-center rounded-full text-lg font-bold text-surface"
-              style={{ background: avatarColor }}
+              style={{
+                background: avatarColor,
+              }}
             >
               {initials(fullName)}
             </span>
           )}
         </div>
+
         <div className="min-w-0">
           <p className="truncate font-heading text-base font-semibold">
-            {user.fullName}
+            {fullName}
           </p>
+
           <p className="truncate text-xs text-foreground-muted">{user.email}</p>
+
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent">
               {user.role === "owner" ? "Owner" : "Tenant"}
             </span>
+
             {user.dormName && (
               <span className="text-xs text-foreground-muted">
                 {user.dormName}
               </span>
             )}
           </div>
+
           <div className="mt-1.5 flex items-center gap-3 text-xs font-medium">
             <button
               type="button"
@@ -277,6 +377,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
                 ? "Change photo"
                 : "Add photo"}
             </button>
+
             {avatarUrl && (
               <button
                 type="button"
@@ -294,10 +395,12 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       {/* Your info */}
       <div className="mb-5 space-y-4 rounded-lg border border-border bg-surface p-5">
         <p className="font-heading text-sm font-semibold">Your info</p>
+
         <div>
           <label htmlFor="fullName" className={labelClass}>
             Full name
           </label>
+
           <input
             id="fullName"
             value={fullName}
@@ -305,29 +408,38 @@ export function ProfileView({ user }: { user: ProfileUser }) {
             className={inputClass}
           />
         </div>
+
         <div>
           <p className={labelClass}>Avatar color</p>
+
           <p className="mb-1.5 text-xs text-foreground-muted">
             {avatarUrl
-              ? "Used if you ever remove your profile photo."
+              ? "Used if you remove your profile photo."
               : "Shows behind your initials until you add a photo."}
           </p>
+
           <div className="flex flex-wrap gap-2">
-            {AVATAR_COLORS.map((c) => (
+            {AVATAR_COLORS.map((color) => (
               <button
-                key={c}
+                key={color}
                 type="button"
-                onClick={() => setAvatarColor(c)}
-                aria-label={`Use avatar color ${c}`}
+                onClick={() => setAvatarColor(color)}
+                aria-label={`Use avatar color ${color}`}
                 className={`h-8 w-8 rounded-full border-2 transition ${
-                  avatarColor === c ? "border-foreground" : "border-transparent"
+                  avatarColor === color
+                    ? "border-foreground"
+                    : "border-transparent"
                 }`}
-                style={{ background: c }}
+                style={{
+                  background: color,
+                }}
               />
             ))}
           </div>
         </div>
+
         <button
+          type="button"
           onClick={saveInfo}
           disabled={savingInfo}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
@@ -336,21 +448,24 @@ export function ProfileView({ user }: { user: ProfileUser }) {
         </button>
       </div>
 
-      {/* Contact details (tenants only) */}
+      {/* Contact details */}
       {user.role === "tenant" && (
         <div className="mb-5 space-y-4 rounded-lg border border-border bg-surface p-5">
           <div>
             <p className="font-heading text-sm font-semibold">
               Contact details
             </p>
+
             <p className="mt-0.5 text-xs text-foreground-muted">
               Kept on file for your dorm owner in case of an emergency.
             </p>
           </div>
+
           <div>
             <label htmlFor="phone" className={labelClass}>
               Your phone number
             </label>
+
             <input
               id="phone"
               value={phone}
@@ -359,11 +474,13 @@ export function ProfileView({ user }: { user: ProfileUser }) {
               className={inputClass}
             />
           </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="emergencyContactName" className={labelClass}>
                 Emergency contact name
               </label>
+
               <input
                 id="emergencyContactName"
                 value={emergencyContactName}
@@ -372,10 +489,12 @@ export function ProfileView({ user }: { user: ProfileUser }) {
                 className={inputClass}
               />
             </div>
+
             <div>
               <label htmlFor="emergencyContactNumber" className={labelClass}>
                 Emergency contact number
               </label>
+
               <input
                 id="emergencyContactNumber"
                 value={emergencyContactNumber}
@@ -385,7 +504,9 @@ export function ProfileView({ user }: { user: ProfileUser }) {
               />
             </div>
           </div>
+
           <button
+            type="button"
             onClick={saveContact}
             disabled={savingContact}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
@@ -398,10 +519,12 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       {/* Password */}
       <div className="space-y-4 rounded-lg border border-border bg-surface p-5">
         <p className="font-heading text-sm font-semibold">Change password</p>
+
         <div>
           <label htmlFor="currentPassword" className={labelClass}>
             Current password
           </label>
+
           <PasswordInput
             id="currentPassword"
             name="currentPassword"
@@ -411,11 +534,13 @@ export function ProfileView({ user }: { user: ProfileUser }) {
             placeholder="••••••••"
           />
         </div>
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="newPassword" className={labelClass}>
               New password
             </label>
+
             <PasswordInput
               id="newPassword"
               name="newPassword"
@@ -425,10 +550,12 @@ export function ProfileView({ user }: { user: ProfileUser }) {
               placeholder="min. 6 characters"
             />
           </div>
+
           <div>
             <label htmlFor="confirmPassword" className={labelClass}>
               Confirm new password
             </label>
+
             <PasswordInput
               id="confirmPassword"
               name="confirmPassword"
@@ -439,7 +566,9 @@ export function ProfileView({ user }: { user: ProfileUser }) {
             />
           </div>
         </div>
+
         <button
+          type="button"
           onClick={changePassword}
           disabled={savingPassword}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
@@ -448,6 +577,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
         </button>
       </div>
 
+      {/* Logout */}
       <form action={logout} className="mt-5">
         <button
           type="submit"
