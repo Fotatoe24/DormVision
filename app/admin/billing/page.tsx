@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import {
   generateMonthlyBills,
   createBill,
@@ -22,22 +22,13 @@ const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    error?: string;
-    saved?: string;
-  }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const { error, saved } = await searchParams;
 
-  // ----------------------------------------------------------
-  // AUTHORIZATION
-  // ----------------------------------------------------------
-
   const session = await getSessionUser();
 
-  if (!session) {
-    redirect("/");
-  }
+  if (!session) redirect("/");
 
   if (session.profile?.role !== "owner") {
     redirect("/tenant");
@@ -46,64 +37,33 @@ export default async function BillingPage({
   const dormId = session.profile.dorm_id;
 
   if (!dormId) {
-    redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Your account is not assigned to a dormitory.")
-    );
+    redirect("/admin?error=No+dormitory+assigned");
   }
 
-  // ----------------------------------------------------------
-  // ADMIN CLIENT
-  //
-  // We already verified the logged-in user is an owner.
-  // Using the admin client here prevents RLS from hiding
-  // bills/tenants from the billing dashboard.
-  // ----------------------------------------------------------
+  const supabase = await createClient();
 
-  const supabase = createAdminClient();
-
-  // ----------------------------------------------------------
+  // ============================================================
   // LOAD BILLS
-  // ----------------------------------------------------------
+  // ============================================================
 
   const { data: bills, error: billsError } = await supabase
     .from("bills")
     .select(
-      `
-      id,
-      tenant_id,
-      room_id,
-      dorm_id,
-      billing_period_start,
-      billing_period_end,
-      due_date,
-      rent_amount,
-      other_charges,
-      charges_note,
-      total_amount,
-      amount_paid,
-      status
-    `
+      "id, tenant_id, room_id, billing_period_start, billing_period_end, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status"
     )
     .eq("dorm_id", dormId)
     .order("due_date", { ascending: false });
 
-  // Do NOT silently turn a database error into an empty bill list.
   if (billsError) {
-    redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Could not load bills: " + billsError.message)
-    );
+    console.error("BILLS LOAD ERROR:", billsError);
   }
 
-  // ----------------------------------------------------------
-  // LOAD ACTUAL TENANTS
+  // ============================================================
+  // LOAD TENANTS
   //
-  // bills.tenant_id -> tenants.id
-  //
-  // NOT:
-  // bills.tenant_id -> users.id
-  // ----------------------------------------------------------
+  // IMPORTANT:
+  // Billing uses tenants.id, NOT users.id.
+  // ============================================================
 
   const { data: tenants, error: tenantsError } = await supabase
     .from("tenants")
@@ -112,53 +72,56 @@ export default async function BillingPage({
       id,
       profile_id,
       full_name,
-      dorm_id,
       room_id,
+      dorm_id,
       status
     `
     )
     .eq("dorm_id", dormId)
     .order("full_name");
 
-  if (tenantsError) {
-    redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Could not load tenants: " + tenantsError.message)
-    );
-  }
-
-  // ----------------------------------------------------------
+  // ============================================================
   // LOAD ROOMS
-  // ----------------------------------------------------------
+  // ============================================================
 
   const { data: rooms, error: roomsError } = await supabase
     .from("rooms")
-    .select("id, room_number")
+    .select("id, room_number, monthly_rate")
     .eq("dorm_id", dormId)
     .order("room_number");
 
-  if (roomsError) {
-    redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Could not load rooms: " + roomsError.message)
+  // ============================================================
+  // ERROR HANDLING
+  // ============================================================
+
+  const loadError =
+    billsError?.message || tenantsError?.message || roomsError?.message || null;
+
+  if (loadError) {
+    return (
+      <main className="flex-1 bg-background px-6 py-10 text-foreground">
+        <div className="mx-auto max-w-3xl">
+          <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
+            Could not load billing data: {loadError}
+          </div>
+        </div>
+      </main>
     );
   }
 
-  // ----------------------------------------------------------
-  // MAP RECORDS
-  // ----------------------------------------------------------
+  // ============================================================
+  // MAPS
+  // ============================================================
 
-  // IMPORTANT:
-  // bill.tenant_id is tenants.id
   const tenantById = new Map(
     (tenants ?? []).map((tenant) => [tenant.id, tenant])
   );
 
   const roomById = new Map((rooms ?? []).map((room) => [room.id, room]));
 
-  // ----------------------------------------------------------
-  // BILL SUMMARY
-  // ----------------------------------------------------------
+  // ============================================================
+  // OUTSTANDING COUNT
+  // ============================================================
 
   const outstandingCount = (bills ?? []).filter(
     (bill) => displayStatus(bill) !== "paid"
@@ -167,9 +130,9 @@ export default async function BillingPage({
   return (
     <main className="flex-1 bg-background px-6 py-10 text-foreground">
       <div className="mx-auto max-w-3xl">
-        {/* ================================================== */}
-        {/* HEADER */}
-        {/* ================================================== */}
+        {/* ======================================================
+            HEADER
+        ====================================================== */}
 
         <div className="mb-6">
           <h1 className="font-heading text-lg font-semibold text-primary">
@@ -178,16 +141,14 @@ export default async function BillingPage({
 
           <p className="text-xs text-foreground-muted">
             {outstandingCount === 0
-              ? bills && bills.length > 0
-                ? "Every bill is paid up."
-                : "No bills have been created yet."
+              ? "Every bill is paid up."
               : `${outstandingCount} bill(s) still outstanding.`}
           </p>
         </div>
 
-        {/* ================================================== */}
-        {/* ERROR */}
-        {/* ================================================== */}
+        {/* ======================================================
+            ERROR / SUCCESS
+        ====================================================== */}
 
         {error && (
           <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">
@@ -195,19 +156,15 @@ export default async function BillingPage({
           </div>
         )}
 
-        {/* ================================================== */}
-        {/* SUCCESS */}
-        {/* ================================================== */}
-
         {saved && (
           <div className="mb-4 rounded-md border border-status-paid/30 bg-status-paid/10 px-3 py-2 text-xs text-status-paid">
             {saved === "1" ? "Saved." : saved}
           </div>
         )}
 
-        {/* ================================================== */}
-        {/* GENERATE MONTHLY BILLS */}
-        {/* ================================================== */}
+        {/* ======================================================
+            GENERATE MONTHLY BILLS
+        ====================================================== */}
 
         <div className="mb-6 flex items-center justify-between rounded-lg border border-border bg-surface p-6">
           <div>
@@ -231,9 +188,9 @@ export default async function BillingPage({
           </form>
         </div>
 
-        {/* ================================================== */}
-        {/* MANUAL BILL CREATION */}
-        {/* ================================================== */}
+        {/* ======================================================
+            MANUAL BILL
+        ====================================================== */}
 
         <details className="mb-6 rounded-lg border border-border bg-surface p-6">
           <summary className="cursor-pointer font-heading text-sm font-semibold">
@@ -241,7 +198,7 @@ export default async function BillingPage({
           </summary>
 
           <form action={createBill} className="mt-4 space-y-4">
-            {/* Tenant */}
+            {/* TENANT */}
 
             <div>
               <label htmlFor="tenantId" className={labelClass}>
@@ -264,9 +221,9 @@ export default async function BillingPage({
               </select>
             </div>
 
-            {/* Billing dates */}
+            {/* DATES */}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label htmlFor="billingPeriodStart" className={labelClass}>
                   Period start
@@ -310,9 +267,9 @@ export default async function BillingPage({
               </div>
             </div>
 
-            {/* Amounts */}
+            {/* AMOUNTS */}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="rentAmount" className={labelClass}>
                   Rent amount
@@ -346,21 +303,7 @@ export default async function BillingPage({
               </div>
             </div>
 
-            {/* Charges note */}
-
-            <div>
-              <label htmlFor="chargesNote" className={labelClass}>
-                Charges note (optional)
-              </label>
-
-              <input
-                id="chargesNote"
-                name="chargesNote"
-                type="text"
-                placeholder="e.g. water bill, key deposit"
-                className={inputClass}
-              />
-            </div>
+            {/* SUBMIT */}
 
             <button
               type="submit"
@@ -371,12 +314,12 @@ export default async function BillingPage({
           </form>
         </details>
 
-        {/* ================================================== */}
-        {/* BILLS LIST */}
-        {/* ================================================== */}
+        {/* ======================================================
+            BILLS LIST
+        ====================================================== */}
 
         <div className="space-y-3">
-          {(!bills || bills.length === 0) && (
+          {(bills ?? []).length === 0 && (
             <p className="rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
               No bills yet — generate this month&apos;s bills above to get
               started.
@@ -390,20 +333,15 @@ export default async function BillingPage({
 
             const status = displayStatus(bill);
 
-            const totalAmount = Number(bill.total_amount ?? 0);
-
-            const amountPaid = Number(bill.amount_paid ?? 0);
-
-            const remaining = Math.max(totalAmount - amountPaid, 0);
+            const remaining =
+              Number(bill.total_amount ?? 0) - Number(bill.amount_paid ?? 0);
 
             return (
               <div
                 key={bill.id}
                 className="rounded-lg border border-border bg-surface p-5"
               >
-                {/* ------------------------------------------ */}
-                {/* BILL HEADER */}
-                {/* ------------------------------------------ */}
+                {/* HEADER */}
 
                 <div className="mb-3 flex items-start justify-between">
                   <div>
@@ -415,15 +353,6 @@ export default async function BillingPage({
                       {room ? `Room ${room.room_number} · ` : ""}
                       Due {formatDate(bill.due_date)}
                     </p>
-
-                    {bill.billing_period_start && (
-                      <p className="mt-0.5 text-xs text-foreground-muted">
-                        Billing period: {formatDate(bill.billing_period_start)}
-                        {bill.billing_period_end
-                          ? ` – ${formatDate(bill.billing_period_end)}`
-                          : ""}
-                      </p>
-                    )}
                   </div>
 
                   <span
@@ -433,9 +362,7 @@ export default async function BillingPage({
                   </span>
                 </div>
 
-                {/* ------------------------------------------ */}
-                {/* AMOUNTS */}
-                {/* ------------------------------------------ */}
+                {/* AMOUNT DETAILS */}
 
                 <div className="mb-3 grid grid-cols-3 gap-3 text-xs">
                   <div>
@@ -456,27 +383,15 @@ export default async function BillingPage({
                     <p className="text-foreground-muted">Total</p>
 
                     <p className="font-mono text-accent">
-                      {formatMoney(totalAmount)}
+                      {formatMoney(bill.total_amount)}
                     </p>
                   </div>
                 </div>
 
-                {/* ------------------------------------------ */}
-                {/* CHARGES NOTE */}
-                {/* ------------------------------------------ */}
-
-                {bill.charges_note && (
-                  <p className="mb-3 text-xs text-foreground-muted">
-                    {bill.charges_note}
-                  </p>
-                )}
-
-                {/* ------------------------------------------ */}
-                {/* PAYMENT SUMMARY */}
-                {/* ------------------------------------------ */}
+                {/* PAYMENT */}
 
                 <div className="mb-3 flex items-center justify-between rounded-md bg-surface-muted px-3 py-2 text-xs">
-                  <span>Paid {formatMoney(amountPaid)}</span>
+                  <span>Paid {formatMoney(bill.amount_paid)}</span>
 
                   <span
                     className={
@@ -489,9 +404,7 @@ export default async function BillingPage({
                   </span>
                 </div>
 
-                {/* ------------------------------------------ */}
                 {/* ACTIONS */}
-                {/* ------------------------------------------ */}
 
                 <div className="flex items-center gap-2">
                   {status !== "paid" && (
@@ -506,7 +419,6 @@ export default async function BillingPage({
                         name="amount"
                         min={0}
                         step="0.01"
-                        max={remaining}
                         required
                         placeholder="Amount"
                         className="w-28 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
@@ -521,7 +433,7 @@ export default async function BillingPage({
                     </form>
                   )}
 
-                  {amountPaid === 0 && (
+                  {Number(bill.amount_paid) === 0 && (
                     <form action={deleteBill}>
                       <input type="hidden" name="billId" value={bill.id} />
 
