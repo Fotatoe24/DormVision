@@ -229,24 +229,20 @@ export async function signUpTenant(formData: FormData) {
   /*
    * IMPORTANT — same reasoning as owner signup:
    *
-   * Do NOT branch on signUpData.session before writing the profile row.
+   * Do NOT branch on signUpData.session before writing the profile rows.
    *
    * When email confirmation is enabled:
    *
    * user    = exists
    * session = null
    *
-   * The previous version of this action only inserted into public.users
-   * when a session was already present, so confirmation-required signups
-   * created an auth.users row with no matching public.users row — the
-   * tenant would confirm their email, log in, and find a blank profile
-   * with no dorm/room data. Using the server-side admin client here
-   * (bypasses RLS, doesn't require a session) writes the profile
-   * immediately regardless of confirmation state, exactly like
-   * signUpOwner already does.
+   * Using the server-side admin client here (bypasses RLS, doesn't
+   * require a session) writes both rows immediately regardless of
+   * confirmation state, exactly like signUpOwner already does.
    */
   const admin = createAdminClient();
 
+  // public.users — the application auth profile (role, credentials link)
   const { error: userError } = await admin.from("users").insert({
     id: userId,
     role: "tenant",
@@ -264,6 +260,30 @@ export async function signUpTenant(formData: FormData) {
       "/signup/tenant?error=" +
         encodeURIComponent(
           "Could not create tenant profile: " + userError.message
+        )
+    );
+  }
+
+  // public.tenants — the occupancy record (room assignment, move-in/out,
+  // status). room_id stays null here; an owner assigns a room later from
+  // /admin/rooms.
+  const { error: tenantError } = await admin.from("tenants").insert({
+    profile_id: userId,
+    dorm_id: dormId,
+    full_name: fullName,
+    contact_number: phone || null,
+  });
+
+  if (tenantError) {
+    // Roll back the users row too, so we never leave a users row with no
+    // matching tenants row.
+    await admin.from("users").delete().eq("id", userId);
+    await admin.auth.admin.deleteUser(userId);
+
+    redirect(
+      "/signup/tenant?error=" +
+        encodeURIComponent(
+          "Could not create tenant record: " + tenantError.message
         )
     );
   }
