@@ -28,7 +28,7 @@ export default async function TenantPage({
   const supabase = await createClient();
 
   const { data: me } = await supabase
-    .from("users")
+    .from("tenants")
     .select(
       "full_name, email, phone, room_id, dorm_id, emergency_contact_name, emergency_contact_number"
     )
@@ -53,7 +53,7 @@ export default async function TenantPage({
 
   const { data: roommates } = me?.room_id
     ? await supabase
-        .from("users")
+        .from("tenants")
         .select("id, full_name")
         .eq("room_id", me.room_id)
         .neq("id", session.user.id)
