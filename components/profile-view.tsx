@@ -45,6 +45,9 @@ type ProfileUser = {
   avatarUrl: string | null;
   createdAt: string;
   dormName?: string;
+  phone: string | null;
+  emergencyContactName: string | null;
+  emergencyContactNumber: string | null;
 };
 
 export function ProfileView({ user }: { user: ProfileUser }) {
@@ -61,6 +64,15 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+
+  const [phone, setPhone] = useState(user.phone ?? "");
+  const [emergencyContactName, setEmergencyContactName] = useState(
+    user.emergencyContactName ?? ""
+  );
+  const [emergencyContactNumber, setEmergencyContactNumber] = useState(
+    user.emergencyContactNumber ?? ""
+  );
+  const [savingContact, setSavingContact] = useState(false);
 
   async function handlePhoto(file: File | undefined) {
     if (!file) return;
@@ -129,6 +141,27 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       return;
     }
     toast.success("Profile updated");
+    router.refresh();
+  }
+
+  async function saveContact() {
+    setSavingContact(true);
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone,
+        emergencyContactName,
+        emergencyContactNumber,
+      }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setSavingContact(false);
+    if (!res.ok) {
+      toast.error(j.error ?? "Couldn't save your contact details");
+      return;
+    }
+    toast.success("Contact details saved");
     router.refresh();
   }
 
@@ -302,6 +335,65 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           {savingInfo ? "Saving…" : "Save changes"}
         </button>
       </div>
+
+      {/* Contact details (tenants only) */}
+      {user.role === "tenant" && (
+        <div className="mb-5 space-y-4 rounded-lg border border-border bg-surface p-5">
+          <div>
+            <p className="font-heading text-sm font-semibold">
+              Contact details
+            </p>
+            <p className="mt-0.5 text-xs text-foreground-muted">
+              Kept on file for your dorm owner in case of an emergency.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="phone" className={labelClass}>
+              Your phone number
+            </label>
+            <input
+              id="phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="09xx xxx xxxx"
+              className={inputClass}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="emergencyContactName" className={labelClass}>
+                Emergency contact name
+              </label>
+              <input
+                id="emergencyContactName"
+                value={emergencyContactName}
+                onChange={(e) => setEmergencyContactName(e.target.value)}
+                placeholder="Maria Santos"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="emergencyContactNumber" className={labelClass}>
+                Emergency contact number
+              </label>
+              <input
+                id="emergencyContactNumber"
+                value={emergencyContactNumber}
+                onChange={(e) => setEmergencyContactNumber(e.target.value)}
+                placeholder="09xx xxx xxxx"
+                className={inputClass}
+              />
+            </div>
+          </div>
+          <button
+            onClick={saveContact}
+            disabled={savingContact}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {savingContact ? "Saving…" : "Save contact details"}
+          </button>
+        </div>
+      )}
 
       {/* Password */}
       <div className="space-y-4 rounded-lg border border-border bg-surface p-5">

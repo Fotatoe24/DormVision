@@ -12,7 +12,7 @@ export default async function ProfilePage() {
   const { data: me } = await supabase
     .from("users")
     .select(
-      "full_name, email, role, avatar_url, avatar_color, created_at, dorm_id"
+      "full_name, email, role, avatar_url, avatar_color, created_at, dorm_id, phone, emergency_contact_name, emergency_contact_number"
     )
     .eq("id", session.user.id)
     .single();
@@ -38,6 +38,9 @@ export default async function ProfilePage() {
         avatarUrl: me.avatar_url,
         createdAt: me.created_at,
         dormName: dorm?.name,
+        phone: me.phone,
+        emergencyContactName: me.emergency_contact_name,
+        emergencyContactNumber: me.emergency_contact_number,
       }}
     />
   );

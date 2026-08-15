@@ -17,14 +17,25 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const { fullName, avatarColor, avatarUrl, currentPassword, newPassword } =
-    body as {
-      fullName?: string;
-      avatarColor?: string;
-      avatarUrl?: string | null;
-      currentPassword?: string;
-      newPassword?: string;
-    };
+  const {
+    fullName,
+    avatarColor,
+    avatarUrl,
+    currentPassword,
+    newPassword,
+    phone,
+    emergencyContactName,
+    emergencyContactNumber,
+  } = body as {
+    fullName?: string;
+    avatarColor?: string;
+    avatarUrl?: string | null;
+    currentPassword?: string;
+    newPassword?: string;
+    phone?: string;
+    emergencyContactName?: string;
+    emergencyContactNumber?: string;
+  };
 
   // ---------- Password change ----------
   if (newPassword) {
@@ -64,6 +75,36 @@ export async function PATCH(request: Request) {
     });
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // ---------- Contact details (phone + emergency contact) ----------
+  if (
+    phone !== undefined ||
+    emergencyContactName !== undefined ||
+    emergencyContactNumber !== undefined
+  ) {
+    const contactUpdates: Record<string, unknown> = {};
+    if (phone !== undefined) contactUpdates.phone = phone.trim() || null;
+    if (emergencyContactName !== undefined) {
+      contactUpdates.emergency_contact_name =
+        emergencyContactName.trim() || null;
+    }
+    if (emergencyContactNumber !== undefined) {
+      contactUpdates.emergency_contact_number =
+        emergencyContactNumber.trim() || null;
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("users")
+      .update(contactUpdates)
+      .eq("id", session.user.id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ ok: true });
