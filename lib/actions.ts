@@ -667,7 +667,6 @@ export async function generateMonthlyBills() {
       due_date: formatDate(dueDate),
       rent_amount: rentAmount,
       other_charges: 0,
-      total_amount: rentAmount,
       amount_paid: 0,
       status: "unpaid",
     });
@@ -746,8 +745,6 @@ export async function createBill(formData: FormData) {
     );
   }
 
-  const totalAmount = rentAmount + otherCharges;
-
   const supabase = await createClient();
 
   // ----------------------------------------------------------
@@ -787,7 +784,6 @@ export async function createBill(formData: FormData) {
     other_charges: otherCharges,
     charges_note: chargesNote || null,
 
-    total_amount: totalAmount,
     amount_paid: 0,
     status: "unpaid",
   });
