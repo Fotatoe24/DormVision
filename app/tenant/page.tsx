@@ -70,25 +70,6 @@ export default async function TenantPage({
   return (
     <main className="flex-1 bg-background px-6 py-10 text-foreground">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-foreground-muted">
-              {dorm?.name ?? "Your dormitory"}
-            </p>
-            <h1 className="font-heading text-lg font-semibold text-primary">
-              My DormVision
-            </h1>
-          </div>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-
         {/* Room info */}
         <div className="mb-6 rounded-lg border border-border bg-surface p-6">
           <p className="mb-3 font-heading text-sm font-semibold">My room</p>
