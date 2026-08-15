@@ -158,10 +158,6 @@ export default async function TenantPage({
                 </span>
               </div>
 
-              <div className="mb-3 text-xs text-foreground-muted">
-                Capacity: {room.capacity}
-              </div>
-
               {roommates && roommates.length > 0 && (
                 <div>
                   <p className="mb-1.5 text-xs text-foreground-muted">
@@ -179,6 +175,12 @@ export default async function TenantPage({
                     ))}
                   </div>
                 </div>
+              )}
+
+              {(!roommates || roommates.length === 0) && (
+                <p className="text-xs text-foreground-muted">
+                  You currently have no roommates.
+                </p>
               )}
             </>
           ) : (
