@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions";
+import { Settings, User, LogOut, ChevronDown } from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -18,7 +19,6 @@ const navItems: NavItem[] = [
   { label: "Payments" },
   { label: "Expenses" },
   { label: "Monitoring" },
-  { label: "Settings" },
 ];
 
 const focusRing =
@@ -56,7 +56,7 @@ function NavList({
   onNavigate?: () => void;
 }) {
   return (
-    <nav aria-label={label} className="flex-1 px-3">
+    <nav aria-label={label} className="px-3">
       <ul className="flex flex-col gap-0.5">
         {navItems.map((item) => {
           if (!item.href) {
@@ -68,6 +68,7 @@ function NavList({
                   className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-foreground-muted/70"
                 >
                   {item.label}
+
                   <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
                     Soon
                   </span>
@@ -113,15 +114,20 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Close on route change, so navigating never leaves the drawer stuck open.
+  // Close menus when the route changes
   useEffect(() => {
     setDrawerOpen(false);
+    setSettingsOpen(false);
   }, [pathname]);
 
+  // Handle mobile drawer keyboard behavior
   useEffect(() => {
     if (!drawerOpen) return;
 
@@ -129,8 +135,11 @@ export function AdminShell({
     document.body.style.overflow = "hidden";
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setDrawerOpen(false);
+      if (e.key === "Escape") {
+        setDrawerOpen(false);
+      }
     }
+
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
@@ -142,23 +151,75 @@ export function AdminShell({
 
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
-      <p className="truncate px-3 text-xs font-medium text-foreground">
-        {ownerName ?? "Owner"}
-      </p>
-      <form action={logout}>
+      <div className="relative">
         <button
-          type="submit"
-          className={`mt-1 w-full rounded-md px-3 py-1.5 text-left text-xs text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+          type="button"
+          onClick={() => setSettingsOpen((open) => !open)}
+          aria-expanded={settingsOpen}
+          aria-haspopup="menu"
+          className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-surface-muted ${focusRing}`}
         >
-          Sign out
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-foreground">
+              {ownerName ?? "Owner"}
+            </p>
+
+            <p className="text-[10px] text-foreground-muted">
+              Account settings
+            </p>
+          </div>
+
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-foreground-muted transition-transform ${
+              settingsOpen ? "rotate-180" : ""
+            }`}
+          />
         </button>
-      </form>
+
+        {settingsOpen && (
+          <div
+            role="menu"
+            className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-lg border border-border bg-surface p-1.5 shadow-lg"
+          >
+            <Link
+              href="/profile"
+              role="menuitem"
+              onClick={() => setSettingsOpen(false)}
+              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+            >
+              <User className="h-4 w-4" />
+              Profile
+            </Link>
+
+            <Link
+              href="/admin/settings"
+              role="menuitem"
+              onClick={() => setSettingsOpen(false)}
+              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+            >
+              <Settings className="h-4 w-4" />
+              Admin settings
+            </Link>
+
+            <form action={logout}>
+              <button
+                type="submit"
+                role="menuitem"
+                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
 
   return (
-    <div className="flex min-h-full flex-1">
-      {/* Skip link — visible only when focused, lets keyboard users bypass the nav */}
+    <div className="flex min-h-screen flex-1">
+      {/* Skip link */}
       <a
         href="#main-content"
         className={`sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-xs focus:font-medium focus:text-surface ${focusRing}`}
@@ -166,35 +227,52 @@ export function AdminShell({
         Skip to content
       </a>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface sm:flex">
-        <div className="flex items-center gap-2 px-4 py-4">
+      {/* =========================================================
+          DESKTOP SIDEBAR
+          - Always follows the viewport height
+          - Does not grow with page content
+          - Navigation can scroll independently
+         ========================================================= */}
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-surface sm:flex">
+        {/* Brand */}
+        <div className="flex shrink-0 items-center gap-2 px-4 py-4">
           <BrandMark />
+
           <div className="min-w-0">
             <p className="font-heading text-sm font-semibold text-foreground">
               DormVision
             </p>
+
             <p className="truncate text-xs text-foreground-muted">
               {dormName ?? "Your dormitory"}
             </p>
           </div>
         </div>
-        <NavList pathname={pathname} label="Admin" />
-        {sidebarFooter}
+
+        {/* Navigation */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <NavList pathname={pathname} label="Admin" />
+        </div>
+
+        {/* Account / Settings */}
+        <div className="shrink-0">{sidebarFooter}</div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
-        {/* Content that must be inert while the mobile drawer is open, so
-            keyboard/AT users can't reach it behind the overlay. */}
+      {/* =========================================================
+          MAIN AREA
+         ========================================================= */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <div inert={drawerOpen ? true : undefined} className="contents">
           {/* Mobile topbar */}
-          <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 sm:hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-3 sm:hidden">
             <div className="flex items-center gap-2">
               <BrandMark />
+
               <p className="font-heading text-sm font-semibold text-foreground">
                 DormVision
               </p>
             </div>
+
             <button
               ref={menuButtonRef}
               type="button"
@@ -219,36 +297,45 @@ export function AdminShell({
             </button>
           </div>
 
+          {/* Main content */}
           <main
             id="main-content"
-            className="flex-1 bg-background px-6 py-10 text-foreground"
+            className="min-h-screen flex-1 bg-background px-6 py-10 text-foreground"
           >
             {children}
           </main>
         </div>
 
-        {/* Mobile drawer */}
+        {/* =========================================================
+            MOBILE DRAWER
+           ========================================================= */}
         {drawerOpen && (
           <div className="fixed inset-0 z-40 sm:hidden">
+            {/* Overlay */}
             <button
               type="button"
               aria-label="Close menu"
               onClick={() => setDrawerOpen(false)}
               className="absolute inset-0 bg-foreground/30"
             />
+
+            {/* Drawer */}
             <div
               role="dialog"
               aria-modal="true"
               aria-label="Menu"
               className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-lg"
             >
-              <div className="flex items-center justify-between px-4 py-4">
+              {/* Drawer header */}
+              <div className="flex shrink-0 items-center justify-between px-4 py-4">
                 <div className="flex items-center gap-2">
                   <BrandMark />
+
                   <p className="font-heading text-sm font-semibold text-foreground">
                     DormVision
                   </p>
                 </div>
+
                 <button
                   ref={closeButtonRef}
                   type="button"
@@ -271,12 +358,18 @@ export function AdminShell({
                   </svg>
                 </button>
               </div>
-              <NavList
-                pathname={pathname}
-                label="Menu"
-                onNavigate={() => setDrawerOpen(false)}
-              />
-              {sidebarFooter}
+
+              {/* Mobile navigation */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <NavList
+                  pathname={pathname}
+                  label="Menu"
+                  onNavigate={() => setDrawerOpen(false)}
+                />
+              </div>
+
+              {/* Mobile account */}
+              <div className="shrink-0">{sidebarFooter}</div>
             </div>
           </div>
         )}
