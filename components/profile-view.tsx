@@ -70,7 +70,6 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   // ---------------------------------------------------------
   // Upload profile photo
   // ---------------------------------------------------------
-
   async function handlePhoto(file: File | undefined) {
     if (!file) return;
 
@@ -98,18 +97,17 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        toast.error(data.error ?? "Couldn't update your photo.");
+        toast.error(data.error ?? "Could not upload your photo.");
         return;
       }
 
       setAvatarUrl(data.avatarUrl ?? null);
 
       toast.success("Profile photo updated.");
-
       router.refresh();
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong while uploading your photo.");
+      console.error("Avatar upload error:", error);
+      toast.error("Could not upload your photo.");
     } finally {
       setUploadingPhoto(false);
 
@@ -122,7 +120,6 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   // ---------------------------------------------------------
   // Remove profile photo
   // ---------------------------------------------------------
-
   async function removePhoto() {
     setUploadingPhoto(true);
 
@@ -133,7 +130,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          removeAvatar: true,
+          avatarUrl: null,
         }),
       });
 
@@ -147,11 +144,10 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       setAvatarUrl(null);
 
       toast.success("Profile photo removed.");
-
       router.refresh();
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong while removing your photo.");
+      console.error("Remove avatar error:", error);
+      toast.error("Couldn't remove your photo.");
     } finally {
       setUploadingPhoto(false);
     }
@@ -160,7 +156,6 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   // ---------------------------------------------------------
   // Save name + avatar color
   // ---------------------------------------------------------
-
   async function saveInfo() {
     setSavingInfo(true);
 
@@ -184,11 +179,10 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       }
 
       toast.success("Profile updated.");
-
       router.refresh();
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong while saving your profile.");
+      console.error("Save profile error:", error);
+      toast.error("Couldn't save your info.");
     } finally {
       setSavingInfo(false);
     }
@@ -197,7 +191,6 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   // ---------------------------------------------------------
   // Save contact details
   // ---------------------------------------------------------
-
   async function saveContact() {
     setSavingContact(true);
 
@@ -222,11 +215,10 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       }
 
       toast.success("Contact details saved.");
-
       router.refresh();
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong while saving your contact details.");
+      console.error("Save contact error:", error);
+      toast.error("Couldn't save your contact details.");
     } finally {
       setSavingContact(false);
     }
@@ -235,7 +227,6 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   // ---------------------------------------------------------
   // Change password
   // ---------------------------------------------------------
-
   async function changePassword() {
     if (!currentPassword) {
       toast.error("Enter your current password.");
@@ -279,8 +270,8 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
       toast.success("Password changed.");
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong while changing your password.");
+      console.error("Change password error:", error);
+      toast.error("Couldn't change your password.");
     } finally {
       setSavingPassword(false);
     }
@@ -321,9 +312,11 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/gif"
             className="hidden"
-            onChange={(e) => handlePhoto(e.target.files?.[0])}
+            onChange={(e) => {
+              void handlePhoto(e.target.files?.[0]);
+            }}
           />
 
           {avatarUrl ? (
@@ -381,7 +374,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
             {avatarUrl && (
               <button
                 type="button"
-                onClick={removePhoto}
+                onClick={() => void removePhoto()}
                 disabled={uploadingPhoto}
                 className="text-foreground-muted hover:text-status-overdue disabled:opacity-50"
               >
@@ -414,7 +407,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
           <p className="mb-1.5 text-xs text-foreground-muted">
             {avatarUrl
-              ? "Used if you remove your profile photo."
+              ? "Used if you ever remove your profile photo."
               : "Shows behind your initials until you add a photo."}
           </p>
 
@@ -440,7 +433,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
         <button
           type="button"
-          onClick={saveInfo}
+          onClick={() => void saveInfo()}
           disabled={savingInfo}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
         >
@@ -507,7 +500,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
           <button
             type="button"
-            onClick={saveContact}
+            onClick={() => void saveContact()}
             disabled={savingContact}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
           >
@@ -569,7 +562,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
         <button
           type="button"
-          onClick={changePassword}
+          onClick={() => void changePassword()}
           disabled={savingPassword}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
         >
@@ -577,7 +570,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
         </button>
       </div>
 
-      {/* Logout */}
+      {/* Sign out */}
       <form action={logout} className="mt-5">
         <button
           type="submit"

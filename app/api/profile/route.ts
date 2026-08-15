@@ -4,10 +4,12 @@ import { getSessionUser } from "@/lib/auth";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const MAX_AVATAR_BYTES = 3 * 1024 * 1024; // 3MB
+const BUCKET_NAME = "avatars";
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
 
-const AVATAR_BUCKET = "avatars";
-
+// ---------------------------------------------------------
+// PATCH /api/profile
+// ---------------------------------------------------------
 export async function PATCH(request: Request) {
   const session = await getSessionUser();
 
@@ -15,141 +17,161 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  // =========================================================
-  // AVATAR UPLOAD / MULTIPART REQUEST
-  // =========================================================
-
   const contentType = request.headers.get("content-type") ?? "";
 
+  // =======================================================
+  // FILE UPLOAD
+  // =======================================================
   if (contentType.includes("multipart/form-data")) {
-    try {
-      const formData = await request.formData();
-      const file = formData.get("avatar");
+    const formData = await request.formData();
 
-      if (!(file instanceof File)) {
-        return NextResponse.json(
-          { error: "No image file was provided." },
-          { status: 400 }
-        );
+    const avatar = formData.get("avatar");
+
+    if (!(avatar instanceof File)) {
+      return NextResponse.json(
+        { error: "No image was provided." },
+        { status: 400 }
+      );
+    }
+
+    if (!avatar.type.startsWith("image/")) {
+      return NextResponse.json(
+        { error: "Please upload an image file." },
+        { status: 400 }
+      );
+    }
+
+    if (avatar.size > MAX_AVATAR_BYTES) {
+      return NextResponse.json(
+        { error: "Photo is too large — the limit is 3MB." },
+        { status: 400 }
+      );
+    }
+
+    const admin = createAdminClient();
+
+    // -----------------------------------------------------
+    // Get current avatar URL
+    // -----------------------------------------------------
+    const { data: currentUser, error: currentUserError } = await admin
+      .from("users")
+      .select("avatar_url")
+      .eq("id", session.user.id)
+      .single();
+
+    if (currentUserError) {
+      console.error("Failed to get current profile:", currentUserError);
+
+      return NextResponse.json(
+        { error: "Could not load your profile." },
+        { status: 500 }
+      );
+    }
+
+    // -----------------------------------------------------
+    // Determine file extension
+    // -----------------------------------------------------
+    const extensionMap: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+    };
+
+    const extension =
+      extensionMap[avatar.type] ??
+      avatar.name.split(".").pop()?.toLowerCase() ??
+      "jpg";
+
+    // Keep the path tied to the authenticated user.
+    const filePath = `${session.user.id}/avatar.${extension}`;
+
+    // -----------------------------------------------------
+    // Remove old avatar files first
+    // -----------------------------------------------------
+    const { data: oldFiles } = await admin.storage
+      .from(BUCKET_NAME)
+      .list(session.user.id);
+
+    if (oldFiles && oldFiles.length > 0) {
+      const filesToDelete = oldFiles
+        .filter((file) => file.name.startsWith("avatar."))
+        .map((file) => `${session.user.id}/${file.name}`);
+
+      if (filesToDelete.length > 0) {
+        const { error: removeError } = await admin.storage
+          .from(BUCKET_NAME)
+          .remove(filesToDelete);
+
+        if (removeError) {
+          console.error("Failed to remove previous avatar:", removeError);
+        }
       }
+    }
 
-      if (!file.type.startsWith("image/")) {
-        return NextResponse.json(
-          { error: "Please upload an image file." },
-          { status: 400 }
-        );
-      }
+    // -----------------------------------------------------
+    // Convert File to ArrayBuffer
+    // -----------------------------------------------------
+    const arrayBuffer = await avatar.arrayBuffer();
 
-      if (file.size > MAX_AVATAR_BYTES) {
-        return NextResponse.json(
-          { error: "Photo is too large — the limit is 3MB." },
-          { status: 400 }
-        );
-      }
-
-      const admin = createAdminClient();
-
-      // -------------------------------------------------------
-      // Determine file extension
-      // -------------------------------------------------------
-
-      const extensionMap: Record<string, string> = {
-        "image/jpeg": "jpg",
-        "image/png": "png",
-        "image/webp": "webp",
-        "image/gif": "gif",
-      };
-
-      const extension = extensionMap[file.type] ?? "jpg";
-
-      // Store each user's avatar in their own folder.
-      //
-      // Example:
-      //
-      // avatars/
-      //   649522dc-1139-40a8-9b29-00433451130b/
-      //     avatar.jpg
-      //
-      const filePath = `${session.user.id}/avatar.${extension}`;
-
-      const fileBuffer = Buffer.from(await file.arrayBuffer());
-
-      // -------------------------------------------------------
-      // Upload to Supabase Storage
-      // -------------------------------------------------------
-
-      const { error: uploadError } = await admin.storage
-        .from(AVATAR_BUCKET)
-        .upload(filePath, fileBuffer, {
-          contentType: file.type,
-          upsert: true,
-          cacheControl: "3600",
-        });
-
-      if (uploadError) {
-        console.error("Avatar upload error:", uploadError);
-
-        return NextResponse.json(
-          {
-            error:
-              "Could not upload your photo. Make sure the avatars storage bucket exists.",
-            details: uploadError.message,
-          },
-          { status: 500 }
-        );
-      }
-
-      // -------------------------------------------------------
-      // Get public URL
-      // -------------------------------------------------------
-
-      const {
-        data: { publicUrl },
-      } = admin.storage.from(AVATAR_BUCKET).getPublicUrl(filePath);
-
-      // -------------------------------------------------------
-      // Save URL to public.users
-      // -------------------------------------------------------
-
-      const { error: updateError } = await admin
-        .from("users")
-        .update({
-          avatar_url: publicUrl,
-        })
-        .eq("id", session.user.id);
-
-      if (updateError) {
-        console.error("Failed to save avatar URL:", updateError);
-
-        return NextResponse.json(
-          {
-            error: "Photo uploaded, but the profile could not be updated.",
-            details: updateError.message,
-          },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        ok: true,
-        avatarUrl: publicUrl,
+    // -----------------------------------------------------
+    // Upload to Supabase Storage
+    // -----------------------------------------------------
+    const { error: uploadError } = await admin.storage
+      .from(BUCKET_NAME)
+      .upload(filePath, arrayBuffer, {
+        contentType: avatar.type,
+        cacheControl: "3600",
+        upsert: true,
       });
-    } catch (error) {
-      console.error("Avatar upload error:", error);
+
+    if (uploadError) {
+      console.error("Avatar upload failed:", uploadError);
 
       return NextResponse.json(
         {
-          error: "Something went wrong while uploading your photo.",
+          error:
+            "Could not upload your photo. Make sure the avatars storage bucket exists.",
         },
         { status: 500 }
       );
     }
+
+    // -----------------------------------------------------
+    // Generate public URL
+    // -----------------------------------------------------
+    const {
+      data: { publicUrl },
+    } = admin.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+
+    // -----------------------------------------------------
+    // Save public URL in users.avatar_url
+    // -----------------------------------------------------
+    const { error: updateError } = await admin
+      .from("users")
+      .update({
+        avatar_url: publicUrl,
+      })
+      .eq("id", session.user.id);
+
+    if (updateError) {
+      console.error("Failed to save avatar URL:", updateError);
+
+      // Clean up uploaded file if DB update failed.
+      await admin.storage.from(BUCKET_NAME).remove([filePath]);
+
+      return NextResponse.json({ error: updateError.message }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      avatarUrl: publicUrl,
+    });
   }
 
-  // =========================================================
+  // =======================================================
   // JSON REQUESTS
-  // =========================================================
-
+  // =======================================================
   const body = await request.json().catch(() => null);
 
   if (!body || typeof body !== "object") {
@@ -159,7 +181,7 @@ export async function PATCH(request: Request) {
   const {
     fullName,
     avatarColor,
-    removeAvatar,
+    avatarUrl,
     currentPassword,
     newPassword,
     phone,
@@ -168,7 +190,7 @@ export async function PATCH(request: Request) {
   } = body as {
     fullName?: string;
     avatarColor?: string;
-    removeAvatar?: boolean;
+    avatarUrl?: string | null;
     currentPassword?: string;
     newPassword?: string;
     phone?: string;
@@ -176,10 +198,68 @@ export async function PATCH(request: Request) {
     emergencyContactNumber?: string;
   };
 
-  // =========================================================
-  // PASSWORD CHANGE
-  // =========================================================
+  // =======================================================
+  // REMOVE AVATAR
+  // =======================================================
+  if (avatarUrl === null) {
+    const admin = createAdminClient();
 
+    // Find all avatar files belonging to this user.
+    const { data: files, error: listError } = await admin.storage
+      .from(BUCKET_NAME)
+      .list(session.user.id);
+
+    if (listError) {
+      console.error("Failed to list avatar files:", listError);
+
+      return NextResponse.json(
+        { error: "Couldn't remove your photo." },
+        { status: 500 }
+      );
+    }
+
+    if (files && files.length > 0) {
+      const filesToDelete = files
+        .filter((file) => file.name.startsWith("avatar."))
+        .map((file) => `${session.user.id}/${file.name}`);
+
+      if (filesToDelete.length > 0) {
+        const { error: removeError } = await admin.storage
+          .from(BUCKET_NAME)
+          .remove(filesToDelete);
+
+        if (removeError) {
+          console.error("Failed to remove avatar:", removeError);
+
+          return NextResponse.json(
+            { error: "Couldn't remove your photo." },
+            { status: 500 }
+          );
+        }
+      }
+    }
+
+    // Clear URL from profile.
+    const { error: updateError } = await admin
+      .from("users")
+      .update({
+        avatar_url: null,
+      })
+      .eq("id", session.user.id);
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      avatarUrl: null,
+    });
+  }
+
+  // =======================================================
+  // PASSWORD CHANGE
+  // =======================================================
   if (newPassword) {
     if (!currentPassword) {
       return NextResponse.json(
@@ -197,7 +277,6 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Verify current password using a separate Supabase client.
     const verifyClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -230,82 +309,9 @@ export async function PATCH(request: Request) {
     });
   }
 
-  // =========================================================
-  // REMOVE AVATAR
-  // =========================================================
-
-  if (removeAvatar === true) {
-    const admin = createAdminClient();
-
-    // Get the current avatar URL first.
-    const { data: user, error: userFetchError } = await admin
-      .from("users")
-      .select("avatar_url")
-      .eq("id", session.user.id)
-      .single();
-
-    if (userFetchError) {
-      return NextResponse.json(
-        { error: userFetchError.message },
-        { status: 400 }
-      );
-    }
-
-    // -------------------------------------------------------
-    // Delete current file from Storage
-    // -------------------------------------------------------
-
-    if (user?.avatar_url) {
-      try {
-        const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
-
-        const markerIndex = user.avatar_url.indexOf(marker);
-
-        if (markerIndex !== -1) {
-          const filePath = user.avatar_url.substring(
-            markerIndex + marker.length
-          );
-
-          if (filePath) {
-            const { error: deleteError } = await admin.storage
-              .from(AVATAR_BUCKET)
-              .remove([filePath]);
-
-            if (deleteError) {
-              console.error("Failed to delete old avatar:", deleteError);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error deleting old avatar:", error);
-      }
-    }
-
-    // -------------------------------------------------------
-    // Clear database URL
-    // -------------------------------------------------------
-
-    const { error: updateError } = await admin
-      .from("users")
-      .update({
-        avatar_url: null,
-      })
-      .eq("id", session.user.id);
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      avatarUrl: null,
-    });
-  }
-
-  // =========================================================
+  // =======================================================
   // CONTACT DETAILS
-  // =========================================================
-
+  // =======================================================
   if (
     phone !== undefined ||
     emergencyContactName !== undefined ||
@@ -343,10 +349,9 @@ export async function PATCH(request: Request) {
     });
   }
 
-  // =========================================================
+  // =======================================================
   // NAME + AVATAR COLOR
-  // =========================================================
-
+  // =======================================================
   const updates: Record<string, unknown> = {};
 
   if (typeof fullName === "string" && fullName.trim()) {
@@ -355,6 +360,12 @@ export async function PATCH(request: Request) {
 
   if (typeof avatarColor === "string") {
     updates.avatar_color = avatarColor;
+  }
+
+  // This is intentionally NOT used for normal photo uploads.
+  // Photos are uploaded through multipart/form-data above.
+  if (avatarUrl !== undefined && avatarUrl !== null) {
+    updates.avatar_url = avatarUrl;
   }
 
   if (Object.keys(updates).length === 0) {
