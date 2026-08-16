@@ -130,10 +130,16 @@ create table bills (
   due_date date not null,
   rent_amount numeric(10, 2) not null default 0,
   other_charges numeric(10, 2) not null default 0,
-  -- Plain DEFAULT, not a GENERATED/STORED column — total_amount is
-  -- computed once at insert time and will NOT auto-update if
-  -- rent_amount/other_charges are edited on an existing row.
-  total_amount numeric(10, 2) default (rent_amount + other_charges),
+  -- Corrected from the schema export this file was originally written
+ -- from, which rendered this as `DEFAULT (rent_amount + other_charges)`
+  -- — that's not valid Postgres (a plain DEFAULT can't reference a
+  -- sibling column; confirmed by actually running this migration
+  -- against a throwaway Postgres instance, which rejected it outright).
+  -- The live column must actually be GENERATED, which the export tool
+  -- apparently mislabeled. This also means the earlier audit note about
+  -- total_amount going "stale" if rent_amount/other_charges are edited
+  -- was wrong — a STORED generated column recomputes automatically.
+  total_amount numeric(10, 2) generated always as (rent_amount + other_charges) stored,
   amount_paid numeric(10, 2) not null default 0,
   status bill_status not null default 'unpaid',
   created_at timestamptz not null default now(),
