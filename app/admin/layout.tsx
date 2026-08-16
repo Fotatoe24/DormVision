@@ -5,8 +5,10 @@ import { AdminShell } from "@/components/admin-shell";
 
 export default async function AdminLayout({
   children,
+  modal,
 }: {
   children: React.ReactNode;
+  modal: React.ReactNode;
 }) {
   const session = await getSessionUser();
 
@@ -26,6 +28,7 @@ export default async function AdminLayout({
   return (
     <AdminShell dormName={dorm?.name} ownerName={session.profile.full_name}>
       {children}
+      {modal}
     </AdminShell>
   );
 }
