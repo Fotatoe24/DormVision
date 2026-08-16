@@ -64,9 +64,17 @@ export function LoginCard() {
           </div>
 
           <div className="mb-5">
-            <label htmlFor="password" className={labelClass}>
-              Password
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label htmlFor="password" className={labelClass}>
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-xs text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <PasswordInput
               id="password"
               name="password"

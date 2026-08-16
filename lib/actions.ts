@@ -11,21 +11,30 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // AUTHENTICATION
 // ============================================================
 
-// Where Supabase should send the user after they click an email
-// confirmation link. Falls back to the request's own host so this
-// works in dev/preview/prod without extra env config, but honors
-// NEXT_PUBLIC_SITE_URL if set (useful when multiple hosts serve the
-// same deployment and confirmation links should always point at one).
-async function getEmailRedirectTo() {
+// Base URL for the current request. Falls back to the request's own
+// host so this works in dev/preview/prod without extra env config, but
+// honors NEXT_PUBLIC_SITE_URL if set (useful when multiple hosts serve
+// the same deployment and links should always point at one).
+async function getSiteOrigin() {
   if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;
+    return process.env.NEXT_PUBLIC_SITE_URL;
   }
 
   const headersList = await headers();
   const host = headersList.get("host");
   const protocol = host?.startsWith("localhost") ? "http" : "https";
 
-  return `${protocol}://${host}/auth/callback`;
+  return `${protocol}://${host}`;
+}
+
+// Where Supabase should send the user after they click an email link
+// (confirmation or password recovery) — always lands on /auth/callback,
+// optionally forwarding to a specific page once the session is set up.
+async function getAuthCallbackUrl(next?: string) {
+  const origin = await getSiteOrigin();
+  const url = `${origin}/auth/callback`;
+
+  return next ? `${url}?next=${encodeURIComponent(next)}` : url;
 }
 
 export async function login(formData: FormData) {
@@ -67,6 +76,65 @@ export async function logout() {
 }
 
 // ============================================================
+// PASSWORD RESET
+// ============================================================
+
+export async function requestPasswordReset(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!email) {
+    redirect(
+      "/forgot-password?error=" + encodeURIComponent("Enter your email.")
+    );
+  }
+
+  const supabase = await createClient();
+
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: await getAuthCallbackUrl("/reset-password"),
+  });
+
+  // Same message whether or not the email has an account — avoids
+  // leaking which addresses are registered.
+  redirect(
+    "/forgot-password?success=" +
+      encodeURIComponent(
+        "If an account exists for that email, a password reset link is on its way."
+      )
+  );
+}
+
+export async function resetPassword(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!password || password.length < 6) {
+    redirect(
+      "/reset-password?error=" +
+        encodeURIComponent("Password must be at least 6 characters.")
+    );
+  }
+
+  if (password !== confirmPassword) {
+    redirect(
+      "/reset-password?error=" + encodeURIComponent("Passwords don't match.")
+    );
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirect("/reset-password?error=" + encodeURIComponent(error.message));
+  }
+
+  redirect(
+    "/?success=" + encodeURIComponent("Password updated. You're signed in.")
+  );
+}
+
+// ============================================================
 // OWNER SIGN-UP
 // ============================================================
 
@@ -86,7 +154,7 @@ export async function signUpOwner(formData: FormData) {
     email,
     password,
     options: {
-      emailRedirectTo: await getEmailRedirectTo(),
+      emailRedirectTo: await getAuthCallbackUrl(),
       data: {
         full_name: fullName,
         dorm_name: dormName,
@@ -213,7 +281,7 @@ export async function signUpTenant(formData: FormData) {
     email,
     password,
     options: {
-      emailRedirectTo: await getEmailRedirectTo(),
+      emailRedirectTo: await getAuthCallbackUrl(),
     },
   });
 
