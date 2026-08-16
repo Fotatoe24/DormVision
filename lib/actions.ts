@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -9,6 +10,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // ============================================================
 // AUTHENTICATION
 // ============================================================
+
+// Where Supabase should send the user after they click an email
+// confirmation link. Falls back to the request's own host so this
+// works in dev/preview/prod without extra env config, but honors
+// NEXT_PUBLIC_SITE_URL if set (useful when multiple hosts serve the
+// same deployment and confirmation links should always point at one).
+async function getEmailRedirectTo() {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;
+  }
+
+  const headersList = await headers();
+  const host = headersList.get("host");
+  const protocol = host?.startsWith("localhost") ? "http" : "https";
+
+  return `${protocol}://${host}/auth/callback`;
+}
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -68,6 +86,7 @@ export async function signUpOwner(formData: FormData) {
     email,
     password,
     options: {
+      emailRedirectTo: await getEmailRedirectTo(),
       data: {
         full_name: fullName,
         dorm_name: dormName,
@@ -193,6 +212,9 @@ export async function signUpTenant(formData: FormData) {
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      emailRedirectTo: await getEmailRedirectTo(),
+    },
   });
 
   if (signUpError || !signUpData.user) {
