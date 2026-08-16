@@ -173,56 +173,25 @@ export async function signUpOwner(formData: FormData) {
   const userId = signUpData.user.id;
   const admin = createAdminClient();
 
-  const { error: userError } = await admin.from("users").insert({
-    id: userId,
-    role: "owner",
-    full_name: fullName,
-    email,
+  // Creates the users row, the dormitories row, and backfills
+  // users.dorm_id all inside one Postgres transaction — see
+  // supabase/migrations/0003_create_owner_account_rpc.sql. Either all
+  // three writes land or none do; the only failure path left is
+  // deleting the just-created auth user.
+  const { error: createError } = await admin.rpc("create_owner_account", {
+    p_user_id: userId,
+    p_full_name: fullName,
+    p_email: email,
+    p_dorm_name: dormName,
   });
 
-  if (userError) {
+  if (createError) {
     await admin.auth.admin.deleteUser(userId);
 
     redirect(
       "/signup?error=" +
         encodeURIComponent(
-          "Could not create owner profile: " + userError.message
-        )
-    );
-  }
-
-  const { data: dorm, error: dormError } = await admin
-    .from("dormitories")
-    .insert({
-      name: dormName,
-      owner_id: userId,
-    })
-    .select("id")
-    .single();
-
-  if (dormError || !dorm) {
-    await admin.from("users").delete().eq("id", userId);
-    await admin.auth.admin.deleteUser(userId);
-
-    redirect(
-      "/signup?error=" +
-        encodeURIComponent(dormError?.message ?? "Could not create dormitory.")
-    );
-  }
-
-  const { error: updateError } = await admin
-    .from("users")
-    .update({
-      dorm_id: dorm.id,
-    })
-    .eq("id", userId);
-
-  if (updateError) {
-    redirect(
-      "/signup?error=" +
-        encodeURIComponent(
-          "Dormitory was created but owner profile could not be updated: " +
-            updateError.message
+          "Could not create owner account: " + createError.message
         )
     );
   }
