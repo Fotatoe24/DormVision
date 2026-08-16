@@ -1,6 +1,16 @@
 -- ============================================================
 -- DormVision — Phase 0 core schema
 -- Dormitory Management & Accounting Information System
+--
+-- ⚠️ SUPERSEDED — kept for history only, does not reflect the
+-- live database. This described an early single-dormitory
+-- "profiles"/"admin" design; production moved to a multi-tenant
+-- schema ("users", "dormitories", dorm_id everywhere, "owner"/
+-- "tenant" roles) directly in the Supabase dashboard, without
+-- ever being captured as a migration until 0002_actual_schema.sql,
+-- which was verified against the live database and is the
+-- current source of truth. Do not apply this file to a fresh
+-- database — use 0002 instead.
 -- ============================================================
 
 -- ---------- profiles (extends auth.users with a role) ----------
