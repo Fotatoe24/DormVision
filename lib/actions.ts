@@ -321,12 +321,14 @@ async function requireOwnerDormId() {
 
 async function syncRoomStatus(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  roomId: string
+  roomId: string,
+  dormId: string
 ) {
   const { data: room } = await supabase
     .from("rooms")
     .select("capacity, status")
     .eq("id", roomId)
+    .eq("dorm_id", dormId)
     .single();
 
   if (!room || room.status === "maintenance") {
@@ -341,7 +343,11 @@ async function syncRoomStatus(
 
   const nextStatus = (count ?? 0) >= room.capacity ? "full" : "available";
 
-  await supabase.from("rooms").update({ status: nextStatus }).eq("id", roomId);
+  await supabase
+    .from("rooms")
+    .update({ status: nextStatus })
+    .eq("id", roomId)
+    .eq("dorm_id", dormId);
 }
 
 // ============================================================
@@ -381,7 +387,7 @@ export async function createRoom(formData: FormData) {
 }
 
 export async function updateRoomStatus(formData: FormData) {
-  await requireOwnerDormId();
+  const dormId = await requireOwnerDormId();
 
   const roomId = String(formData.get("roomId") ?? "");
   const status = String(formData.get("status") ?? "");
@@ -394,13 +400,22 @@ export async function updateRoomStatus(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("rooms")
     .update({ status })
-    .eq("id", roomId);
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .select("id");
 
   if (error) {
     redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Room not found or access denied.")
+    );
   }
 
   revalidatePath("/admin/rooms");
@@ -408,7 +423,7 @@ export async function updateRoomStatus(formData: FormData) {
 }
 
 export async function deleteRoom(formData: FormData) {
-  await requireOwnerDormId();
+  const dormId = await requireOwnerDormId();
 
   const roomId = String(formData.get("roomId") ?? "");
 
@@ -431,10 +446,22 @@ export async function deleteRoom(formData: FormData) {
     );
   }
 
-  const { error } = await supabase.from("rooms").delete().eq("id", roomId);
+  const { data, error } = await supabase
+    .from("rooms")
+    .delete()
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .select("id");
 
   if (error) {
     redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Room not found or access denied.")
+    );
   }
 
   revalidatePath("/admin/rooms");
@@ -442,7 +469,7 @@ export async function deleteRoom(formData: FormData) {
 }
 
 export async function assignTenantToRoom(formData: FormData) {
-  await requireOwnerDormId();
+  const dormId = await requireOwnerDormId();
 
   const tenantId = String(formData.get("tenantId") ?? "");
   const roomId = String(formData.get("roomId") ?? "");
@@ -459,6 +486,7 @@ export async function assignTenantToRoom(formData: FormData) {
     .from("rooms")
     .select("capacity")
     .eq("id", roomId)
+    .eq("dorm_id", dormId)
     .single();
 
   if (roomError || !room) {
@@ -477,14 +505,16 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
-  const { error: tenantSyncError } = await supabase
+  const { data: updatedTenant, error: tenantSyncError } = await supabase
     .from("tenants")
     .update({
       room_id: roomId,
       status: "active",
       move_out_date: null,
     })
-    .eq("profile_id", tenantId);
+    .eq("profile_id", tenantId)
+    .eq("dorm_id", dormId)
+    .select("id");
 
   if (tenantSyncError) {
     redirect(
@@ -492,14 +522,21 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
-  await syncRoomStatus(supabase, roomId);
+  if (!updatedTenant || updatedTenant.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Tenant not found or access denied.")
+    );
+  }
+
+  await syncRoomStatus(supabase, roomId, dormId);
 
   revalidatePath("/admin/rooms");
   redirect("/admin/rooms");
 }
 
 export async function removeTenantFromRoom(formData: FormData) {
-  await requireOwnerDormId();
+  const dormId = await requireOwnerDormId();
 
   const tenantId = String(formData.get("tenantId") ?? "");
   const roomId = String(formData.get("roomId") ?? "");
@@ -510,14 +547,16 @@ export async function removeTenantFromRoom(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error: tenantSyncError } = await supabase
+  const { data: updatedTenant, error: tenantSyncError } = await supabase
     .from("tenants")
     .update({
       room_id: null,
       status: "inactive",
       move_out_date: new Date().toISOString().slice(0, 10),
     })
-    .eq("profile_id", tenantId);
+    .eq("profile_id", tenantId)
+    .eq("dorm_id", dormId)
+    .select("id");
 
   if (tenantSyncError) {
     redirect(
@@ -525,8 +564,15 @@ export async function removeTenantFromRoom(formData: FormData) {
     );
   }
 
+  if (!updatedTenant || updatedTenant.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Tenant not found or access denied.")
+    );
+  }
+
   if (roomId) {
-    await syncRoomStatus(supabase, roomId);
+    await syncRoomStatus(supabase, roomId, dormId);
   }
 
   revalidatePath("/admin/rooms");
