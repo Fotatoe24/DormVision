@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { removeTenantFromRoom } from "@/lib/actions";
+import { removeTenantFromRoom, transferTenant } from "@/lib/actions";
 import {
   formatMoney,
   formatBillDate,
@@ -29,9 +29,13 @@ export const tenantStatusLabels: Record<string, string> = {
 export async function TenantDetailContent({
   id,
   dormId,
+  error,
+  saved,
 }: {
   id: string;
   dormId: string;
+  error?: string;
+  saved?: string;
 }) {
   const supabase = createAdminClient();
 
@@ -53,6 +57,9 @@ export async function TenantDetailContent({
     { data: room },
     { data: bills },
     { data: payments },
+    { data: assignmentHistory },
+    { data: dormRooms },
+    { data: dormTenants },
   ] = await Promise.all([
     tenant.profile_id
       ? supabase
@@ -78,6 +85,22 @@ export async function TenantDetailContent({
       .select("id, amount, paid_at, method")
       .eq("tenant_id", tenant.id)
       .order("paid_at", { ascending: false }),
+    supabase
+      .from("room_assignments")
+      .select("id, started_at, ended_at, rooms(room_number)")
+      .eq("tenant_id", tenant.id)
+      .order("started_at", { ascending: false }),
+    supabase
+      .from("rooms")
+      .select("id, room_number, capacity, status")
+      .eq("dorm_id", dormId)
+      .in("status", ["available", "full"])
+      .order("room_number"),
+    supabase
+      .from("tenants")
+      .select("room_id")
+      .eq("dorm_id", dormId)
+      .eq("status", "active"),
   ]);
 
   const balance = (bills ?? []).reduce((sum, bill) => {
@@ -85,6 +108,19 @@ export async function TenantDetailContent({
     if (displayStatus === "paid") return sum;
     return sum + (Number(bill.total_amount) - Number(bill.amount_paid));
   }, 0);
+
+  const occupancyByRoom = new Map<string, number>();
+  for (const t of dormTenants ?? []) {
+    if (t.room_id) {
+      occupancyByRoom.set(t.room_id, (occupancyByRoom.get(t.room_id) ?? 0) + 1);
+    }
+  }
+
+  const transferableRooms = (dormRooms ?? []).filter(
+    (r) =>
+      r.id !== tenant.room_id &&
+      (occupancyByRoom.get(r.id) ?? 0) < r.capacity
+  );
 
   return (
     <>
@@ -104,6 +140,18 @@ export async function TenantDetailContent({
           {tenantStatusLabels[tenant.status] ?? tenant.status}
         </span>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">
+          {error}
+        </div>
+      )}
+
+      {saved && (
+        <div className="mb-4 rounded-md border border-status-paid/30 bg-status-paid/10 px-3 py-2 text-xs text-status-paid">
+          {saved}
+        </div>
+      )}
 
       {/* Balance */}
       <div className="mb-5 rounded-lg border border-border bg-surface p-5">
@@ -144,36 +192,72 @@ export async function TenantDetailContent({
       <div className="mb-5 rounded-lg border border-border bg-surface p-5">
         <p className="mb-3 font-heading text-sm font-semibold">Room</p>
         {room ? (
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm">
-                Room <span className="font-mono">{room.room_number}</span>
-              </p>
-              <p className="text-xs text-foreground-muted">
-                Moved in {formatBillDate(tenant.move_in_date)}
-              </p>
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm">
+                  Room <span className="font-mono">{room.room_number}</span>
+                </p>
+                <p className="text-xs text-foreground-muted">
+                  Moved in {formatBillDate(tenant.move_in_date)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="font-mono text-sm text-accent">
+                  {formatMoney(room.monthly_rate)}/mo
+                </span>
+                {tenant.profile_id && (
+                  <form action={removeTenantFromRoom}>
+                    <input
+                      type="hidden"
+                      name="tenantId"
+                      value={tenant.profile_id}
+                    />
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
+                    >
+                      Remove from room
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <span className="font-mono text-sm text-accent">
-                {formatMoney(room.monthly_rate)}/mo
-              </span>
-              {tenant.profile_id && (
-                <form action={removeTenantFromRoom}>
-                  <input
-                    type="hidden"
-                    name="tenantId"
-                    value={tenant.profile_id}
-                  />
-                  <input type="hidden" name="roomId" value={room.id} />
-                  <button
-                    type="submit"
-                    className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
-                  >
-                    Remove from room
-                  </button>
-                </form>
-              )}
-            </div>
+
+            {tenant.profile_id && transferableRooms.length > 0 && (
+              <form
+                action={transferTenant}
+                className="flex items-center gap-2 border-t border-border pt-3"
+              >
+                <input
+                  type="hidden"
+                  name="tenantId"
+                  value={tenant.profile_id}
+                />
+                <select
+                  name="newRoomId"
+                  required
+                  defaultValue=""
+                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                >
+                  <option value="" disabled>
+                    Transfer to…
+                  </option>
+                  {transferableRooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      Room {r.room_number}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground-muted hover:text-foreground"
+                >
+                  Transfer
+                </button>
+              </form>
+            )}
           </div>
         ) : (
           <p className="text-sm text-foreground-muted">
@@ -181,6 +265,47 @@ export async function TenantDetailContent({
             <Link href="/admin/rooms" className="text-primary hover:underline">
               Assign a room
             </Link>
+          </p>
+        )}
+      </div>
+
+      {/* Assignment history */}
+      <div className="mb-5 rounded-lg border border-border bg-surface overflow-hidden">
+        <div className="border-b border-border px-4 py-3 text-sm font-heading font-semibold">
+          Assignment history
+        </div>
+        {assignmentHistory && assignmentHistory.length > 0 ? (
+          <div>
+            {assignmentHistory.map((a, i) => {
+              const roomRel = a.rooms as
+                | { room_number: string }
+                | { room_number: string }[]
+                | null;
+              const roomNumber = Array.isArray(roomRel)
+                ? roomRel[0]?.room_number
+                : roomRel?.room_number;
+
+              return (
+                <div
+                  key={a.id}
+                  className={`flex items-center justify-between px-4 py-3 text-sm ${
+                    i < assignmentHistory.length - 1
+                      ? "border-b border-border"
+                      : ""
+                  }`}
+                >
+                  <span>Room {roomNumber ?? "—"}</span>
+                  <span className="text-xs text-foreground-muted">
+                    {formatBillDate(a.started_at)} –{" "}
+                    {a.ended_at ? formatBillDate(a.ended_at) : "Present"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="px-4 py-6 text-center text-sm text-foreground-muted">
+            No recorded room history yet.
           </p>
         )}
       </div>

@@ -9,6 +9,10 @@ const inputClass =
 const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
 
 const categoryLabels: Record<string, string> = {
+  // "Rent" is labeled here only in case older rows exist -- it's no
+  // longer offered below. Rent income is already fully captured via
+  // Billing/Payments; logging it again here would double-count it on
+  // the Overview (see app/admin/page.tsx's Financial summary).
   rent: "Rent",
   other_income: "Other income",
   utilities: "Utilities",
@@ -18,7 +22,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 const categoryOptions = [
-  { group: "Income", options: ["rent", "other_income"] },
+  { group: "Income", options: ["other_income"] },
   {
     group: "Expense",
     options: ["utilities", "repairs", "supplies", "other_expense"],

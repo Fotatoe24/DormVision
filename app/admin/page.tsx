@@ -56,26 +56,35 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient();
 
-  const [{ data: dorm }, { data: rooms }, { data: tenants }, { data: bills }] =
-    await Promise.all([
-      supabase
-        .from("dormitories")
-        .select("id, name, join_code")
-        .eq("id", dormId)
-        .single(),
-      supabase
-        .from("rooms")
-        .select("id, room_number, capacity, status")
-        .eq("dorm_id", dormId),
-      supabase
-        .from("tenants")
-        .select("id, room_id, status")
-        .eq("dorm_id", dormId),
-      supabase
-        .from("bills")
-        .select("id, status, due_date, total_amount, amount_paid")
-        .eq("dorm_id", dormId),
-    ]);
+  const [
+    { data: dorm },
+    { data: rooms },
+    { data: tenants },
+    { data: bills },
+    { data: transactions },
+  ] = await Promise.all([
+    supabase
+      .from("dormitories")
+      .select("id, name, join_code")
+      .eq("id", dormId)
+      .single(),
+    supabase
+      .from("rooms")
+      .select("id, room_number, capacity, status")
+      .eq("dorm_id", dormId),
+    supabase
+      .from("tenants")
+      .select("id, room_id, status")
+      .eq("dorm_id", dormId),
+    supabase
+      .from("bills")
+      .select("id, status, due_date, total_amount, amount_paid")
+      .eq("dorm_id", dormId),
+    supabase
+      .from("transactions")
+      .select("type, category, amount")
+      .eq("dorm_id", dormId),
+  ]);
 
   const tenantIds = ((tenants as TenantRow[] | null) ?? []).map((t) => t.id);
 
@@ -83,21 +92,23 @@ export default async function AdminPage() {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const [{ data: recentPayments }, { data: monthPayments }] = tenantIds.length
-    ? await Promise.all([
-        supabase
-          .from("payments")
-          .select("id, amount, paid_at, tenants(full_name)")
-          .in("tenant_id", tenantIds)
-          .order("paid_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("payments")
-          .select("amount")
-          .in("tenant_id", tenantIds)
-          .gte("paid_at", startOfMonth.toISOString()),
-      ])
-    : [{ data: [] }, { data: [] }];
+  const [{ data: recentPayments }, { data: monthPayments }, { data: allPayments }] =
+    tenantIds.length
+      ? await Promise.all([
+          supabase
+            .from("payments")
+            .select("id, amount, paid_at, tenants(full_name)")
+            .in("tenant_id", tenantIds)
+            .order("paid_at", { ascending: false })
+            .limit(5),
+          supabase
+            .from("payments")
+            .select("amount")
+            .in("tenant_id", tenantIds)
+            .gte("paid_at", startOfMonth.toISOString()),
+          supabase.from("payments").select("amount").in("tenant_id", tenantIds),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }];
 
   // ------------------------------------------------------------
   // Derived stats — every number below comes straight from the
@@ -113,6 +124,36 @@ export default async function AdminPage() {
     (sum, p) => sum + Number(p.amount),
     0
   );
+
+  // ------------------------------------------------------------
+  // Financial summary — payments and transactions are two separate,
+  // unlinked ledgers (payments = rent collected against bills;
+  // transactions = everything else). Total Income sums both, but
+  // excludes any transaction logged under the 'rent' category: rent
+  // income is already fully captured via payments/bills, so counting
+  // a manually-logged 'rent' transaction too would double it. This is
+  // the single source of truth for income/expense figures across the
+  // app (Overview, Expenses, Monitoring) -- see lib/actions.ts's
+  // createTransaction, which no longer offers 'rent' as an income
+  // category for exactly this reason.
+  // ------------------------------------------------------------
+  const totalPayments = (allPayments ?? []).reduce(
+    (sum, p) => sum + Number(p.amount),
+    0
+  );
+
+  const transactionRows = transactions ?? [];
+
+  const transactionIncome = transactionRows
+    .filter((t) => t.type === "income" && t.category !== "rent")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const totalExpenses = transactionRows
+    .filter((t) => t.type === "expense")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const totalIncome = totalPayments + transactionIncome;
+  const netIncome = totalIncome - totalExpenses;
 
   const billsWithStatus = ((bills as BillRow[] | null) ?? []).map((b) => ({
     ...b,
@@ -200,6 +241,39 @@ export default async function AdminPage() {
           >
             {statusCounts.overdue}
           </p>
+        </div>
+      </div>
+
+      {/* Financial summary */}
+      <div className="mb-6">
+        <p className="mb-2 text-xs font-medium text-foreground-muted">
+          Financial summary (all-time)
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <p className="text-xs text-foreground-muted">Total income</p>
+            <p className="mt-1 font-mono text-xl font-semibold text-status-paid">
+              {formatMoney(totalIncome)}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <p className="text-xs text-foreground-muted">Total expenses</p>
+            <p className="mt-1 font-mono text-xl font-semibold text-status-overdue">
+              {formatMoney(totalExpenses)}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <p className="text-xs text-foreground-muted">Net income</p>
+            <p
+              className={`mt-1 font-mono text-xl font-semibold ${
+                netIncome >= 0 ? "text-status-paid" : "text-status-overdue"
+              }`}
+            >
+              {formatMoney(netIncome)}
+            </p>
+          </div>
         </div>
       </div>
 

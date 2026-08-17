@@ -3,7 +3,10 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createRoom,
+  updateRoom,
   updateRoomStatus,
+  deactivateRoom,
+  reactivateRoom,
   deleteRoom,
   assignTenantToRoom,
   removeTenantFromRoom,
@@ -17,20 +20,22 @@ const statusStyles: Record<string, string> = {
   available: "bg-status-paid/15 text-status-paid",
   full: "bg-status-unpaid/15 text-status-unpaid",
   maintenance: "bg-status-partial/15 text-status-partial",
+  inactive: "bg-foreground-muted/15 text-foreground-muted",
 };
 
 const statusLabels: Record<string, string> = {
   available: "Available",
   full: "Full",
   maintenance: "Under maintenance",
+  inactive: "Inactive",
 };
 
 export default async function RoomsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, saved } = await searchParams;
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -107,6 +112,7 @@ export default async function RoomsPage({
   }
 
   const roomsWithSpace = (rooms ?? []).filter((r) => {
+    if (r.status === "maintenance" || r.status === "inactive") return false;
     const occ = tenantsByRoom.get(r.id)?.length ?? 0;
     return occ < r.capacity;
   });
@@ -123,6 +129,12 @@ export default async function RoomsPage({
       {error && (
         <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">
           {error}
+        </div>
+      )}
+
+      {saved && (
+        <div className="mb-4 rounded-md border border-status-paid/30 bg-status-paid/10 px-3 py-2 text-xs text-status-paid">
+          {saved}
         </div>
       )}
 
@@ -243,31 +255,133 @@ export default async function RoomsPage({
                 </div>
               ) : (
                 <p className="mb-3 text-xs text-foreground-muted">
-                  No tenants assigned yet.
+                  No tenants are currently assigned to this room.
                 </p>
               )}
 
-              <div className="mt-auto flex items-center gap-2 pt-1">
-                <form action={updateRoomStatus}>
+              {/* Edit room */}
+              <details className="mb-3 rounded-md border border-border">
+                <summary className="cursor-pointer px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground">
+                  Edit room
+                </summary>
+                <form
+                  action={updateRoom}
+                  className="space-y-3 border-t border-border p-3"
+                >
                   <input type="hidden" name="roomId" value={room.id} />
-                  <input
-                    type="hidden"
-                    name="status"
-                    value={
-                      room.status === "maintenance"
-                        ? "available"
-                        : "maintenance"
-                    }
-                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label
+                        htmlFor={`roomNumber-${room.id}`}
+                        className={labelClass}
+                      >
+                        Room number
+                      </label>
+                      <input
+                        id={`roomNumber-${room.id}`}
+                        name="roomNumber"
+                        type="text"
+                        required
+                        defaultValue={room.room_number}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor={`capacity-${room.id}`}
+                        className={labelClass}
+                      >
+                        Capacity
+                      </label>
+                      <input
+                        id={`capacity-${room.id}`}
+                        name="capacity"
+                        type="number"
+                        min={occupants.length || 1}
+                        required
+                        defaultValue={room.capacity}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`monthlyRate-${room.id}`}
+                      className={labelClass}
+                    >
+                      Monthly rate
+                    </label>
+                    <input
+                      id={`monthlyRate-${room.id}`}
+                      name="monthlyRate"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      required
+                      defaultValue={room.monthly_rate}
+                      className={`${inputClass} font-mono`}
+                    />
+                  </div>
+                  {occupants.length > 0 && (
+                    <p className="text-[11px] text-foreground-muted">
+                      This room currently has {occupants.length} occupant(s).
+                      Capacity can&apos;t be reduced below that.
+                    </p>
+                  )}
                   <button
                     type="submit"
-                    className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
                   >
-                    {room.status === "maintenance"
-                      ? "Mark available"
-                      : "Mark under maintenance"}
+                    Save changes
                   </button>
                 </form>
+              </details>
+
+              <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+                {room.status === "inactive" ? (
+                  <form action={reactivateRoom}>
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+                    >
+                      Reactivate room
+                    </button>
+                  </form>
+                ) : (
+                  <form action={updateRoomStatus}>
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <input
+                      type="hidden"
+                      name="status"
+                      value={
+                        room.status === "maintenance"
+                          ? "available"
+                          : "maintenance"
+                      }
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+                    >
+                      {room.status === "maintenance"
+                        ? "Mark available"
+                        : "Mark under maintenance"}
+                    </button>
+                  </form>
+                )}
+
+                {occupants.length === 0 && room.status !== "inactive" && (
+                  <form action={deactivateRoom}>
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+                    >
+                      Deactivate room
+                    </button>
+                  </form>
+                )}
 
                 {occupants.length === 0 && (
                   <form action={deleteRoom}>

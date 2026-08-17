@@ -507,7 +507,10 @@ async function syncRoomStatus(
     .eq("dorm_id", dormId)
     .single();
 
-  if (!room || room.status === "maintenance") {
+  // 'maintenance' and 'inactive' are both deliberate, owner-set
+  // states -- occupancy changes shouldn't silently flip a room back
+  // to 'available'/'full' out from under them.
+  if (!room || room.status === "maintenance" || room.status === "inactive") {
     return;
   }
 
@@ -660,13 +663,26 @@ export async function assignTenantToRoom(formData: FormData) {
 
   const { data: room, error: roomError } = await supabase
     .from("rooms")
-    .select("capacity")
+    .select("capacity, status")
     .eq("id", roomId)
     .eq("dorm_id", dormId)
     .single();
 
   if (roomError || !room) {
     redirect("/admin/rooms?error=" + encodeURIComponent("Room not found."));
+  }
+
+  // Only 'available'/'full' rooms take new tenants -- a room under
+  // maintenance or deliberately deactivated should not silently
+  // accept an assignment (the old version of this check only looked
+  // at capacity, so a maintenance room could be assigned into).
+  if (room.status === "maintenance" || room.status === "inactive") {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent(
+          `That room is ${room.status} and can't accept new tenants right now.`
+        )
+    );
   }
 
   const { count } = await supabase
@@ -681,11 +697,14 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   const { data: updatedTenant, error: tenantSyncError } = await supabase
     .from("tenants")
     .update({
       room_id: roomId,
       status: "active",
+      move_in_date: today,
       move_out_date: null,
     })
     .eq("profile_id", tenantId)
@@ -705,10 +724,21 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
+  // Open a new assignment-history row. Best-effort: the tenant update
+  // above already succeeded and is the source of truth for who's in
+  // which room today, so a history-row failure here shouldn't block
+  // the assignment itself.
+  await supabase.from("room_assignments").insert({
+    tenant_id: updatedTenant[0].id,
+    room_id: roomId,
+    dorm_id: dormId,
+    started_at: today,
+  });
+
   await syncRoomStatus(supabase, roomId, dormId);
 
   revalidatePath("/admin/rooms");
-  redirect("/admin/rooms");
+  redirect("/admin/rooms?saved=" + encodeURIComponent("Tenant assigned."));
 }
 
 export async function removeTenantFromRoom(formData: FormData) {
@@ -723,12 +753,21 @@ export async function removeTenantFromRoom(formData: FormData) {
 
   const supabase = createAdminClient();
 
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Unassigning a tenant from a room is not the same as deactivating
+  // their account -- they stay 'active' and simply become
+  // unassigned (room_id null). The old version of this set status to
+  // 'inactive', which then hid the tenant from
+  // app/admin/rooms/page.tsx's "Unassigned tenants" list (the only
+  // UI that can assign a tenant to a room), leaving them stuck with
+  // no way to be reassigned.
   const { data: updatedTenant, error: tenantSyncError } = await supabase
     .from("tenants")
     .update({
       room_id: null,
-      status: "inactive",
-      move_out_date: new Date().toISOString().slice(0, 10),
+      status: "active",
+      move_out_date: today,
     })
     .eq("profile_id", tenantId)
     .eq("dorm_id", dormId)
@@ -747,12 +786,318 @@ export async function removeTenantFromRoom(formData: FormData) {
     );
   }
 
+  // Close the open assignment-history row, if one exists. Tenants
+  // assigned before 0008_room_assignment_history.sql shipped won't
+  // have one for stays that already ended -- nothing to close, and
+  // that's fine.
+  await supabase
+    .from("room_assignments")
+    .update({ ended_at: today })
+    .eq("tenant_id", updatedTenant[0].id)
+    .is("ended_at", null);
+
   if (roomId) {
     await syncRoomStatus(supabase, roomId, dormId);
   }
 
   revalidatePath("/admin/rooms");
-  redirect("/admin/rooms");
+  redirect(
+    "/admin/rooms?saved=" + encodeURIComponent("Tenant removed from room.")
+  );
+}
+
+// One combined operation instead of "remove, then reassign" as two
+// separate steps -- closes the old assignment and opens the new one,
+// validating the destination before touching anything.
+export async function transferTenant(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const newRoomId = String(formData.get("newRoomId") ?? "");
+
+  if (!tenantId || !newRoomId) {
+    redirect(
+      "/admin/tenants?error=" + encodeURIComponent("Pick a destination room.")
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("id, room_id, full_name")
+    .eq("profile_id", tenantId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (tenantError || !tenant) {
+    redirect("/admin/tenants?error=" + encodeURIComponent("Tenant not found."));
+  }
+
+  if (tenant.room_id === newRoomId) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent("Tenant is already in that room.")
+    );
+  }
+
+  const { data: newRoom, error: newRoomError } = await supabase
+    .from("rooms")
+    .select("capacity, status")
+    .eq("id", newRoomId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (newRoomError || !newRoom) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent("Destination room not found.")
+    );
+  }
+
+  if (newRoom.status === "maintenance" || newRoom.status === "inactive") {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent(
+          `That room is ${newRoom.status} and can't accept new tenants right now.`
+        )
+    );
+  }
+
+  const { count } = await supabase
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("room_id", newRoomId)
+    .eq("status", "active");
+
+  if ((count ?? 0) >= newRoom.capacity) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent("That room is already full.")
+    );
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const oldRoomId = tenant.room_id;
+
+  const { error: updateError } = await supabase
+    .from("tenants")
+    .update({
+      room_id: newRoomId,
+      status: "active",
+      move_in_date: today,
+      move_out_date: null,
+    })
+    .eq("id", tenant.id);
+
+  if (updateError) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent("Could not transfer tenant: " + updateError.message)
+    );
+  }
+
+  // Close the old assignment-history row (if any) and open a new one.
+  await supabase
+    .from("room_assignments")
+    .update({ ended_at: today })
+    .eq("tenant_id", tenant.id)
+    .is("ended_at", null);
+
+  await supabase.from("room_assignments").insert({
+    tenant_id: tenant.id,
+    room_id: newRoomId,
+    dorm_id: dormId,
+    started_at: today,
+  });
+
+  if (oldRoomId) {
+    await syncRoomStatus(supabase, oldRoomId, dormId);
+  }
+
+  await syncRoomStatus(supabase, newRoomId, dormId);
+
+  revalidatePath("/admin/tenants");
+  revalidatePath("/admin/rooms");
+  redirect(
+    "/admin/tenants/" +
+      tenant.id +
+      "?saved=" +
+      encodeURIComponent(`${tenant.full_name} transferred.`)
+  );
+}
+
+export async function deactivateRoom(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const roomId = String(formData.get("roomId") ?? "");
+
+  if (!roomId) {
+    redirect("/admin/rooms");
+  }
+
+  const supabase = createAdminClient();
+
+  const { count } = await supabase
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("room_id", roomId)
+    .eq("status", "active");
+
+  if ((count ?? 0) > 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent(
+          "Move tenants out of this room before deactivating it."
+        )
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .update({ status: "inactive" })
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .select("id");
+
+  if (error) {
+    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Room not found or access denied.")
+    );
+  }
+
+  revalidatePath("/admin/rooms");
+  redirect("/admin/rooms?saved=" + encodeURIComponent("Room deactivated."));
+}
+
+export async function reactivateRoom(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const roomId = String(formData.get("roomId") ?? "");
+
+  if (!roomId) {
+    redirect("/admin/rooms");
+  }
+
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .update({ status: "available" })
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .eq("status", "inactive")
+    .select("id");
+
+  if (error) {
+    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Room not found, access denied, or not inactive.")
+    );
+  }
+
+  revalidatePath("/admin/rooms");
+  redirect("/admin/rooms?saved=" + encodeURIComponent("Room reactivated."));
+}
+
+export async function updateRoom(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const roomId = String(formData.get("roomId") ?? "");
+  const roomNumber = String(formData.get("roomNumber") ?? "").trim();
+  const capacity = Number(formData.get("capacity"));
+  const monthlyRate = Number(formData.get("monthlyRate"));
+
+  if (!roomId) {
+    redirect("/admin/rooms");
+  }
+
+  if (!roomNumber) {
+    redirect(
+      "/admin/rooms?error=" + encodeURIComponent("Room number is required.")
+    );
+  }
+
+  if (!Number.isFinite(capacity) || capacity < 1) {
+    redirect(
+      "/admin/rooms?error=" + encodeURIComponent("Capacity must be at least 1.")
+    );
+  }
+
+  if (!Number.isFinite(monthlyRate) || monthlyRate < 0) {
+    redirect(
+      "/admin/rooms?error=" + encodeURIComponent("Invalid monthly rate.")
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  const { count } = await supabase
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("room_id", roomId)
+    .eq("status", "active");
+
+  const occupantCount = count ?? 0;
+
+  if (capacity < occupantCount) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent(
+          `This room currently has ${occupantCount} occupant(s). Capacity cannot be reduced below ${occupantCount}.`
+        )
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .update({
+      room_number: roomNumber,
+      capacity,
+      monthly_rate: monthlyRate,
+    })
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .select("id");
+
+  if (error) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Could not update room: " + error.message)
+    );
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/rooms?error=" +
+        encodeURIComponent("Room not found or access denied.")
+    );
+  }
+
+  // Capacity may have changed, which can flip full <-> available.
+  await syncRoomStatus(supabase, roomId, dormId);
+
+  revalidatePath("/admin/rooms");
+  redirect("/admin/rooms?saved=" + encodeURIComponent("Room updated."));
 }
 
 // ============================================================
@@ -1247,6 +1592,18 @@ export async function createTransaction(formData: FormData) {
     )
   ) {
     redirect("/admin/expenses?error=" + encodeURIComponent("Invalid category."));
+  }
+
+  // Rent income is already fully captured via Billing/Payments --
+  // logging it again here would double-count it on the Overview's
+  // Financial summary (see app/admin/page.tsx).
+  if (type === "income" && category === "rent") {
+    redirect(
+      "/admin/expenses?error=" +
+        encodeURIComponent(
+          "Rent income is tracked through Billing, not here. Record the payment on the Billing page instead."
+        )
+    );
   }
 
   if (!Number.isFinite(amount) || amount <= 0) {

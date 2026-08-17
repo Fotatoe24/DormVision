@@ -6,10 +6,13 @@ import { TenantDetailContent } from "@/components/tenant-detail-content";
 
 export default async function TenantDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const { id } = await params;
+  const { error, saved } = await searchParams;
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -28,7 +31,7 @@ export default async function TenantDetailPage({
         <ArrowLeft className="h-4 w-4" />
       </Link>
 
-      <TenantDetailContent id={id} dormId={dormId} />
+      <TenantDetailContent id={id} dormId={dormId} error={error} saved={saved} />
     </div>
   );
 }
