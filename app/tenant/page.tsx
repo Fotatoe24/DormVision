@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantAccessState } from "@/lib/tenant-status";
+import { RegistrationStatus } from "@/components/registration-status";
 import {
   billStatusStyles,
   formatMoney,
@@ -8,11 +10,33 @@ import {
   displayBillStatus,
 } from "@/lib/billing";
 
-export default async function TenantPage() {
+export default async function TenantPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string }>;
+}) {
+  const { error, saved } = await searchParams;
   const session = await getSessionUser();
 
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
+
+  // Anything short of an approved tenant record gets the
+  // pending/rejected/apply screen instead of the real tenant
+  // dashboard below -- the actual access-control enforcement, not
+  // just a hidden button. getTenantAccessState is the single source
+  // of truth for what "approved" means anywhere in the app: presence
+  // of a tenants row, not the user's role alone.
+  const accessState = await getTenantAccessState(
+    session.user.id,
+    session.profile?.dorm_id ?? null
+  );
+
+  if (accessState.status !== "approved") {
+    return (
+      <RegistrationStatus state={accessState} error={error} saved={saved} />
+    );
+  }
 
   const supabase = createAdminClient();
 

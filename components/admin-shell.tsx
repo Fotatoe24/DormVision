@@ -9,17 +9,25 @@ import { Settings, User, LogOut, ChevronDown } from "lucide-react";
 type NavItem = {
   label: string;
   href?: string;
+  badge?: number;
 };
 
-const navItems: NavItem[] = [
-  { label: "Overview", href: "/admin" },
-  { label: "Rooms", href: "/admin/rooms" },
-  { label: "Tenants", href: "/admin/tenants" },
-  { label: "Billing", href: "/admin/billing" },
-  { label: "Payments", href: "/admin/payments" },
-  { label: "Expenses", href: "/admin/expenses" },
-  { label: "Monitoring", href: "/admin/monitoring" },
-];
+function buildNavItems(pendingRequestsCount: number): NavItem[] {
+  return [
+    { label: "Overview", href: "/admin" },
+    { label: "Rooms", href: "/admin/rooms" },
+    { label: "Tenants", href: "/admin/tenants" },
+    {
+      label: "Tenant Requests",
+      href: "/admin/tenant-requests",
+      badge: pendingRequestsCount > 0 ? pendingRequestsCount : undefined,
+    },
+    { label: "Billing", href: "/admin/billing" },
+    { label: "Payments", href: "/admin/payments" },
+    { label: "Expenses", href: "/admin/expenses" },
+    { label: "Monitoring", href: "/admin/monitoring" },
+  ];
+}
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
@@ -49,16 +57,18 @@ function BrandMark() {
 function NavList({
   pathname,
   label,
+  items,
   onNavigate,
 }: {
   pathname: string;
   label: string;
+  items: NavItem[];
   onNavigate?: () => void;
 }) {
   return (
     <nav aria-label={label} className="px-3">
       <ul className="flex flex-col gap-0.5">
-        {navItems.map((item) => {
+        {items.map((item) => {
           if (!item.href) {
             return (
               <li key={item.label}>
@@ -88,13 +98,21 @@ function NavList({
                 href={item.href}
                 onClick={onNavigate}
                 aria-current={isActive ? "page" : undefined}
-                className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${focusRing} ${
+                className={`flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${focusRing} ${
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
                 }`}
               >
                 {item.label}
+                {item.badge !== undefined && (
+                  <span
+                    className="rounded-full bg-status-overdue px-1.5 py-0.5 text-[10px] font-semibold leading-none text-surface"
+                    aria-label={`${item.badge} pending`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             </li>
           );
@@ -107,13 +125,16 @@ function NavList({
 export function AdminShell({
   dormName,
   ownerName,
+  pendingRequestsCount = 0,
   children,
 }: {
   dormName?: string;
   ownerName?: string;
+  pendingRequestsCount?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const navItems = buildNavItems(pendingRequestsCount);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -256,7 +277,7 @@ export function AdminShell({
 
         {/* Navigation */}
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <NavList pathname={pathname} label="Admin" />
+          <NavList pathname={pathname} label="Admin" items={navItems} />
         </div>
 
         {/* Account / Settings */}
@@ -369,6 +390,7 @@ export function AdminShell({
                 <NavList
                   pathname={pathname}
                   label="Menu"
+                  items={navItems}
                   onNavigate={() => setDrawerOpen(false)}
                 />
               </div>

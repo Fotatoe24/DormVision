@@ -324,10 +324,20 @@ export async function signUpOwner(formData: FormData) {
 // TENANT SIGN-UP
 // ============================================================
 
+// Signing up no longer creates a tenants row directly -- it creates a
+// tenant_registration_requests row (status='pending') instead, and the
+// dorm owner has to explicitly approve it (approveRegistrationRequest,
+// below) before the person counts as a real tenant anywhere in the
+// app. See supabase/migrations/0009_tenant_registration_requests.sql
+// for the full rationale.
 export async function signUpTenant(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
   const dormCode = String(formData.get("dormCode") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
+  const requestedRoomNote = String(
+    formData.get("requestedRoomNote") ?? ""
+  ).trim();
+  const message = String(formData.get("message") ?? "").trim();
   const email = String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
@@ -366,6 +376,21 @@ export async function signUpTenant(formData: FormData) {
 
   const dormId = matches[0].id;
 
+  const { data: dormSettings } = await admin
+    .from("dorm_settings")
+    .select("allow_tenant_registration")
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (dormSettings && dormSettings.allow_tenant_registration === false) {
+    redirect(
+      "/signup/tenant?error=" +
+        encodeURIComponent(
+          "This dormitory isn't accepting new registrations right now. Check with the owner."
+        )
+    );
+  }
+
   const { data: existing } = await admin
     .from("users")
     .select("id")
@@ -396,25 +421,31 @@ export async function signUpTenant(formData: FormData) {
     redirect(
       "/signup/tenant?error=" +
         encodeURIComponent(
-          "Could not create tenant profile: " + userError.message
+          "Could not create your account: " + userError.message
         )
     );
   }
 
-  const { error: tenantError } = await admin.from("tenants").insert({
-    profile_id: userId,
-    dorm_id: dormId,
-    full_name: fullName,
-    contact_number: phone || null,
-  });
+  const { error: requestError } = await admin
+    .from("tenant_registration_requests")
+    .insert({
+      dorm_id: dormId,
+      user_id: userId,
+      full_name: fullName,
+      email,
+      contact_number: phone || null,
+      requested_room_note: requestedRoomNote || null,
+      message: message || null,
+      status: "pending",
+    });
 
-  if (tenantError) {
+  if (requestError) {
     await admin.from("users").delete().eq("id", userId);
 
     redirect(
       "/signup/tenant?error=" +
         encodeURIComponent(
-          "Could not create tenant record: " + tenantError.message
+          "Could not submit your registration: " + requestError.message
         )
     );
   }
@@ -429,7 +460,305 @@ export async function signUpTenant(formData: FormData) {
 
   await setSessionCookie(token);
 
-  redirect("/tenant");
+  redirect(
+    "/tenant?saved=" +
+      encodeURIComponent(
+        "Registration submitted. The dorm owner needs to approve your request before you become an active tenant."
+      )
+  );
+}
+
+// ============================================================
+// TENANT REGISTRATION REQUESTS
+// ============================================================
+
+export async function approveRegistrationRequest(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const requestId = String(formData.get("requestId") ?? "");
+
+  if (!requestId) {
+    redirect("/admin/tenant-requests");
+  }
+
+  const admin = createAdminClient();
+
+  const { data: request, error: requestError } = await admin
+    .from("tenant_registration_requests")
+    .select("id, user_id, full_name, contact_number, status")
+    .eq("id", requestId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (requestError || !request) {
+    redirect(
+      "/admin/tenant-requests?error=" +
+        encodeURIComponent("Request not found.")
+    );
+  }
+
+  if (request.status !== "pending") {
+    redirect(
+      "/admin/tenant-requests?error=" +
+        encodeURIComponent("This request has already been reviewed.")
+    );
+  }
+
+  // Guard against creating a second tenant row if one already exists
+  // for this person in this dorm (e.g. a stale duplicate request).
+  const { data: existingTenant } = await admin
+    .from("tenants")
+    .select("id")
+    .eq("profile_id", request.user_id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (existingTenant) {
+    redirect(
+      "/admin/tenant-requests?error=" +
+        encodeURIComponent("This person is already a tenant.")
+    );
+  }
+
+  const session = await getSessionUser();
+
+  // Creates the tenant record only -- deliberately no room
+  // assignment. A tenant only occupies a room once the owner
+  // explicitly assigns one via assignTenantToRoom on the Rooms page.
+  const { error: tenantError } = await admin.from("tenants").insert({
+    profile_id: request.user_id,
+    dorm_id: dormId,
+    full_name: request.full_name,
+    contact_number: request.contact_number,
+  });
+
+  if (tenantError) {
+    redirect(
+      "/admin/tenant-requests?error=" +
+        encodeURIComponent("Could not create tenant: " + tenantError.message)
+    );
+  }
+
+  const { error: updateError } = await admin
+    .from("tenant_registration_requests")
+    .update({
+      status: "approved",
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: session!.user.id,
+    })
+    .eq("id", requestId);
+
+  if (updateError) {
+    redirect(
+      "/admin/tenant-requests?error=" + encodeURIComponent(updateError.message)
+    );
+  }
+
+  revalidatePath("/admin/tenant-requests");
+  revalidatePath("/admin/tenants");
+  revalidatePath("/admin");
+  redirect(
+    "/admin/tenant-requests?saved=" +
+      encodeURIComponent(`${request.full_name} approved.`)
+  );
+}
+
+export async function rejectRegistrationRequest(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const requestId = String(formData.get("requestId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  if (!requestId) {
+    redirect("/admin/tenant-requests");
+  }
+
+  const admin = createAdminClient();
+  const session = await getSessionUser();
+
+  const { data, error } = await admin
+    .from("tenant_registration_requests")
+    .update({
+      status: "rejected",
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: session!.user.id,
+      rejection_reason: reason || null,
+    })
+    .eq("id", requestId)
+    .eq("dorm_id", dormId)
+    .eq("status", "pending")
+    .select("id, full_name");
+
+  if (error) {
+    redirect("/admin/tenant-requests?error=" + encodeURIComponent(error.message));
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/tenant-requests?error=" +
+        encodeURIComponent("Request not found, access denied, or already reviewed.")
+    );
+  }
+
+  revalidatePath("/admin/tenant-requests");
+  redirect(
+    "/admin/tenant-requests?saved=" +
+      encodeURIComponent(`${data[0].full_name}'s request was rejected.`)
+  );
+}
+
+export async function cancelRegistrationRequest(formData: FormData) {
+  const session = await getSessionUser();
+
+  if (!session) {
+    redirect("/");
+  }
+
+  const requestId = String(formData.get("requestId") ?? "");
+
+  if (!requestId) {
+    redirect("/tenant");
+  }
+
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from("tenant_registration_requests")
+    .update({ status: "cancelled" })
+    .eq("id", requestId)
+    .eq("user_id", session.user.id)
+    .eq("status", "pending");
+
+  if (error) {
+    redirect("/tenant?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/tenant");
+  redirect(
+    "/tenant?saved=" + encodeURIComponent("Registration request cancelled.")
+  );
+}
+
+// Lets an authenticated tenant-role user with no active tenant record
+// (rejected, or their prior request was cancelled) apply again --
+// signup only ever creates the *first* request for an account, so
+// this is the only path back in afterward.
+export async function submitRegistrationRequest(formData: FormData) {
+  const session = await getSessionUser();
+
+  if (!session) {
+    redirect("/");
+  }
+
+  if (session.profile?.role !== "tenant") {
+    redirect("/");
+  }
+
+  const dormCode = String(formData.get("dormCode") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const requestedRoomNote = String(
+    formData.get("requestedRoomNote") ?? ""
+  ).trim();
+  const message = String(formData.get("message") ?? "").trim();
+
+  if (!dormCode) {
+    redirect("/tenant?error=" + encodeURIComponent("Enter a Dorm ID."));
+  }
+
+  const admin = createAdminClient();
+
+  const { data: matches, error: lookupError } = await admin.rpc(
+    "lookup_dormitory_by_code",
+    { p_code: dormCode }
+  );
+
+  if (lookupError || !matches || matches.length === 0) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent(
+          "That Dorm ID wasn't found. Check with your dorm owner."
+        )
+    );
+  }
+
+  const dormId = matches[0].id;
+
+  const { data: existingTenant } = await admin
+    .from("tenants")
+    .select("id")
+    .eq("profile_id", session.user.id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (existingTenant) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent("You're already a tenant at that dormitory.")
+    );
+  }
+
+  // The database also enforces this (the partial unique index on
+  // tenant_registration_requests), but checking here first gives a
+  // clear message instead of a raw constraint-violation error.
+  const { data: existingPending } = await admin
+    .from("tenant_registration_requests")
+    .select("id")
+    .eq("user_id", session.user.id)
+    .eq("dorm_id", dormId)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (existingPending) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent("You already have a pending request for that dormitory.")
+    );
+  }
+
+  const { data: dormSettings } = await admin
+    .from("dorm_settings")
+    .select("allow_tenant_registration")
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (dormSettings && dormSettings.allow_tenant_registration === false) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent(
+          "This dormitory isn't accepting new registrations right now."
+        )
+    );
+  }
+
+  const { error: insertError } = await admin
+    .from("tenant_registration_requests")
+    .insert({
+      dorm_id: dormId,
+      user_id: session.user.id,
+      full_name: session.profile.full_name,
+      email: session.user.email,
+      contact_number: phone || null,
+      requested_room_note: requestedRoomNote || null,
+      message: message || null,
+      status: "pending",
+    });
+
+  if (insertError) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent("Could not submit your request: " + insertError.message)
+    );
+  }
+
+  // Keep users.dorm_id pointed at the dorm this account most recently
+  // applied to, so the pending-state page shows the right dorm name.
+  await admin
+    .from("users")
+    .update({ dorm_id: dormId })
+    .eq("id", session.user.id);
+
+  revalidatePath("/tenant");
+  redirect("/tenant?saved=" + encodeURIComponent("Registration submitted."));
 }
 
 // ============================================================

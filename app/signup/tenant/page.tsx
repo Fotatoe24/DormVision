@@ -15,10 +15,11 @@ export default function TenantSignUpPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <h1 className="font-heading text-lg font-semibold text-foreground">
-            Join your dormitory
+            Request to join your dormitory
           </h1>
           <p className="mt-1 text-xs text-foreground-muted">
-            Ask your dorm owner for the Dorm ID before signing up.
+            Ask your dorm owner for the Dorm ID. Your dorm owner reviews and
+            approves every request before you become a tenant.
           </p>
         </div>
 
@@ -82,7 +83,7 @@ export default function TenantSignUpPage() {
             />
           </div>
 
-          <div className="mb-5">
+          <div className="mb-4">
             <label htmlFor="password" className={labelClass}>
               Password
             </label>
@@ -97,11 +98,36 @@ export default function TenantSignUpPage() {
             />
           </div>
 
+          <div className="mb-4">
+            <label htmlFor="requestedRoomNote" className={labelClass}>
+              Preferred room (optional)
+            </label>
+            <input
+              id="requestedRoomNote"
+              name="requestedRoomNote"
+              type="text"
+              placeholder="e.g. Room 203, or no preference"
+              className={inputClass}
+            />
+          </div>
+
+          <div className="mb-5">
+            <label htmlFor="message" className={labelClass}>
+              Message to the dorm owner (optional)
+            </label>
+            <textarea
+              id="message"
+              name="message"
+              rows={3}
+              className={inputClass}
+            />
+          </div>
+
           <SubmitButton
-            pendingText="Joining…"
+            pendingText="Submitting…"
             className="w-full rounded-md bg-primary py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            Join dormitory
+            Submit registration
           </SubmitButton>
         </form>
 
