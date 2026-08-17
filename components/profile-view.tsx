@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/password-input";
 import { logout } from "@/lib/actions";
@@ -320,10 +321,11 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           />
 
           {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={avatarUrl}
               alt={fullName}
+              width={64}
+              height={64}
               className="h-16 w-16 rounded-full object-cover"
             />
           ) : (

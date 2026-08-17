@@ -836,76 +836,79 @@ export async function generateMonthlyBills() {
     );
   }
 
+  const billableTenants = tenants
+    .filter((t) => t.room_id)
+    .map((t) => ({
+      ...t,
+      room: Array.isArray(t.rooms) ? t.rooms[0] : t.rooms,
+    }))
+    .filter((t) => t.room);
+
+  // ----------------------------------------------------------
+  // Batch-check which of these tenants already have a bill for the
+  // current billing period, in one query instead of one per tenant.
+  // ----------------------------------------------------------
+
+  const tenantIds = billableTenants.map((t) => t.id);
+
+  const { data: existingBills, error: existingBillsError } = tenantIds.length
+    ? await supabase
+        .from("bills")
+        .select("tenant_id")
+        .in("tenant_id", tenantIds)
+        .eq("billing_period_start", billingPeriodStart)
+        .eq("billing_period_end", billingPeriodEnd)
+    : { data: [], error: null };
+
+  if (existingBillsError) {
+    redirect(
+      "/admin/billing?error=" +
+        encodeURIComponent(
+          "Could not check existing bills: " + existingBillsError.message
+        )
+    );
+  }
+
+  const alreadyBilledTenantIds = new Set(
+    (existingBills ?? []).map((b) => b.tenant_id)
+  );
+
+  const tenantsToBill = billableTenants.filter(
+    (t) => !alreadyBilledTenantIds.has(t.id)
+  );
+
+  const skippedCount = billableTenants.length - tenantsToBill.length;
+
+  // ----------------------------------------------------------
+  // Bulk-insert one bill per remaining tenant in a single insert.
+  // ----------------------------------------------------------
+
   let createdCount = 0;
-  let skippedCount = 0;
 
-  // ----------------------------------------------------------
-  // Create one bill per tenant
-  // ----------------------------------------------------------
-
-  for (const tenant of tenants) {
-    if (!tenant.room_id) {
-      continue;
-    }
-
-    const room = Array.isArray(tenant.rooms) ? tenant.rooms[0] : tenant.rooms;
-
-    if (!room) {
-      continue;
-    }
-
-    const rentAmount = Number(room.monthly_rate ?? 0);
-
-    // Check whether this tenant already has a bill
-    // for the current billing period.
-    const { data: existingBill, error: existingBillError } = await supabase
-      .from("bills")
-      .select("id")
-      .eq("tenant_id", tenant.id)
-      .eq("billing_period_start", billingPeriodStart)
-      .eq("billing_period_end", billingPeriodEnd)
-      .maybeSingle();
-
-    if (existingBillError) {
-      redirect(
-        "/admin/billing?error=" +
-          encodeURIComponent(
-            "Could not check existing bills: " + existingBillError.message
-          )
-      );
-    }
-
-    if (existingBill) {
-      skippedCount++;
-      continue;
-    }
-
-    const { error: insertError } = await supabase.from("bills").insert({
-      tenant_id: tenant.id,
-      room_id: tenant.room_id,
-      dorm_id: dormId,
-      billing_period_start: billingPeriodStart,
-      billing_period_end: billingPeriodEnd,
-      due_date: formatDate(dueDate),
-      rent_amount: rentAmount,
-      other_charges: 0,
-      amount_paid: 0,
-      status: "unpaid",
-    });
+  if (tenantsToBill.length > 0) {
+    const { error: insertError } = await supabase.from("bills").insert(
+      tenantsToBill.map((tenant) => ({
+        tenant_id: tenant.id,
+        room_id: tenant.room_id,
+        dorm_id: dormId,
+        billing_period_start: billingPeriodStart,
+        billing_period_end: billingPeriodEnd,
+        due_date: formatDate(dueDate),
+        rent_amount: Number(tenant.room?.monthly_rate ?? 0),
+        other_charges: 0,
+        amount_paid: 0,
+        status: "unpaid" as const,
+      }))
+    );
 
     if (insertError) {
       redirect(
         "/admin/billing?error=" +
-          encodeURIComponent(
-            "Could not create bill for " +
-              tenant.full_name +
-              ": " +
-              insertError.message
-          )
+          encodeURIComponent("Could not create bills: " + insertError.message)
       );
     }
 
-    createdCount++;
+    createdCount = tenantsToBill.length;
   }
 
   revalidatePath("/admin/billing");

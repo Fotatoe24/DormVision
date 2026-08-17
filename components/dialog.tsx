@@ -9,6 +9,9 @@ import { X } from "lucide-react";
 // accessible-dialog pattern already used by AdminShell's mobile drawer:
 // role="dialog", aria-modal, focus moved to the close button on open,
 // Escape to close, background scroll locked while open.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Dialog({
   children,
   ariaLabel,
@@ -17,6 +20,7 @@ export function Dialog({
   ariaLabel: string;
 }) {
   const router = useRouter();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   function close() {
@@ -30,6 +34,28 @@ export function Dialog({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         close();
+        return;
+      }
+
+      // Trap focus inside the dialog — without this, Tab/Shift+Tab can
+      // move focus into the page behind the modal.
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+        );
+
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
 
@@ -52,6 +78,7 @@ export function Dialog({
       />
 
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}

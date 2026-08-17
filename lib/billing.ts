@@ -20,6 +20,17 @@ export function formatBillDate(d: string) {
   });
 }
 
+// For full timestamps (e.g. payments.paid_at), unlike formatBillDate
+// above which is for date-only columns (bills.due_date) and needs the
+// "T00:00:00" fix to avoid a timezone-driven off-by-one day.
+export function formatPaymentDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 // A bill is treated as overdue in the UI whenever it's past its due date
 // and not fully paid — this is derived at render time rather than stored,
 // since there's no background job to flip a persisted status on a schedule.

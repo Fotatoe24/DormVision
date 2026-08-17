@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney, displayBillStatus } from "@/lib/billing";
+import { formatMoney, displayBillStatus, formatPaymentDate } from "@/lib/billing";
 
 type TenantRow = {
   id: string;
@@ -36,13 +36,6 @@ const roomStatusLabels: Record<string, string> = {
   full: "Full",
   maintenance: "Under maintenance",
 };
-
-function formatPaymentDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-  });
-}
 
 export default async function AdminPage() {
   const session = await getSessionUser();

@@ -223,7 +223,7 @@ export default async function BillingPage({
 
             {/* DATES */}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
                 <label htmlFor="billingPeriodStart" className={labelClass}>
                   Period start
@@ -364,7 +364,7 @@ export default async function BillingPage({
 
                 {/* AMOUNT DETAILS */}
 
-                <div className="mb-3 grid grid-cols-3 gap-3 text-xs">
+                <div className="mb-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
                   <div>
                     <p className="text-foreground-muted">Rent</p>
 

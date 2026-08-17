@@ -5,6 +5,7 @@ import { removeTenantFromRoom } from "@/lib/actions";
 import {
   formatMoney,
   formatBillDate,
+  formatPaymentDate,
   displayBillStatus,
   billStatusStyles,
 } from "@/lib/billing";
@@ -241,11 +242,7 @@ export async function TenantDetailContent({
               >
                 <div>
                   <p className="text-sm font-medium">
-                    {new Date(p.paid_at).toLocaleDateString("en-PH", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatPaymentDate(p.paid_at)}
                   </p>
                   <p className="text-xs capitalize text-foreground-muted">
                     {p.method.replace("_", " ")}

@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { updateTenantProfile, logout } from "@/lib/actions";
-import { SubmitButton } from "@/components/submit-button";
 import {
   billStatusStyles,
   formatMoney,
@@ -10,16 +8,7 @@ import {
   displayBillStatus,
 } from "@/lib/billing";
 
-const inputClass =
-  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
-const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
-export default async function TenantPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
-}) {
-  const { error, saved } = await searchParams;
-
+export default async function TenantPage() {
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -50,31 +39,6 @@ export default async function TenantPage({
   if (tenantError) {
     console.error("Tenant lookup error:", tenantError);
   }
-
-  // ---------------------------------------------------------
-  // Get the user's profile information
-  // email and phone are stored in public.users
-  // ---------------------------------------------------------
-  const { data: profile, error: profileError } = await supabase
-    .from("users")
-    .select("id, full_name, email, phone")
-    .eq("id", session.user.id)
-    .maybeSingle();
-
-  if (profileError) {
-    console.error("Profile lookup error:", profileError);
-  }
-
-  // ---------------------------------------------------------
-  // Get dormitory
-  // ---------------------------------------------------------
-  const { data: dorm } = me?.dorm_id
-    ? await supabase
-        .from("dormitories")
-        .select("id, name")
-        .eq("id", me.dorm_id)
-        .maybeSingle()
-    : { data: null };
 
   // ---------------------------------------------------------
   // Get assigned room
@@ -140,7 +104,7 @@ export default async function TenantPage({
   }
 
   return (
-    <main className="flex-1 bg-background px-6 py-10 text-foreground">
+    <>
       <div className="mx-auto max-w-2xl">
         {/* Room info */}
         <div className="mb-6 rounded-lg border border-border bg-surface p-6">
@@ -265,6 +229,6 @@ export default async function TenantPage({
           )}
         </div>
       </div>
-    </main>
+    </>
   );
 }
