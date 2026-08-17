@@ -1,13 +1,38 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney, displayBillStatus, formatPaymentDate } from "@/lib/billing";
+import {
+  formatMoney,
+  displayBillStatus,
+  formatPaymentDate,
+} from "@/lib/billing";
 import { CopyButton } from "@/components/copy-button";
+import { IncomeExpenseChart } from "@/components/income-expense-chart";
+import { RoomOccupancyMeter } from "@/components/room-occupancy-meter";
+import {
+  Building2,
+  Users,
+  Banknote,
+  Receipt,
+  AlertTriangle,
+  UserPlus,
+  Wrench,
+} from "lucide-react";
+
+type RoomRow = {
+  id: string;
+  room_number: string;
+  capacity: number;
+  status: string;
+};
 
 type TenantRow = {
   id: string;
   room_id: string | null;
   status: string;
+  full_name: string;
+  move_in_date: string;
 };
 
 type BillRow = {
@@ -16,26 +41,8 @@ type BillRow = {
   due_date: string;
   total_amount: number | string;
   amount_paid: number | string;
-};
-
-const billStatusLabels: Record<string, string> = {
-  paid: "Paid",
-  partial: "Partial",
-  unpaid: "Unpaid",
-  overdue: "Overdue",
-};
-
-const billStatusDotColors: Record<string, string> = {
-  paid: "bg-status-paid",
-  partial: "bg-status-partial",
-  unpaid: "bg-status-unpaid",
-  overdue: "bg-status-overdue",
-};
-
-const roomStatusLabels: Record<string, string> = {
-  available: "Available",
-  full: "Full",
-  maintenance: "Under maintenance",
+  tenant_id: string;
+  room_id: string | null;
 };
 
 export default async function AdminPage() {
@@ -63,7 +70,7 @@ export default async function AdminPage() {
     { data: tenants },
     { data: bills },
     { data: transactions },
-    { count: pendingRequestsCount },
+    { data: pendingRequests },
   ] = await Promise.all([
     supabase
       .from("dormitories")
@@ -76,76 +83,75 @@ export default async function AdminPage() {
       .eq("dorm_id", dormId),
     supabase
       .from("tenants")
-      .select("id, room_id, status")
+      .select("id, room_id, status, full_name, move_in_date")
       .eq("dorm_id", dormId),
     supabase
       .from("bills")
-      .select("id, status, due_date, total_amount, amount_paid")
+      .select(
+        "id, status, due_date, total_amount, amount_paid, tenant_id, room_id"
+      )
       .eq("dorm_id", dormId),
     supabase
       .from("transactions")
-      .select("type, category, amount")
+      .select("type, category, amount, occurred_at")
       .eq("dorm_id", dormId),
     supabase
       .from("tenant_registration_requests")
-      .select("id", { count: "exact", head: true })
+      .select("id, full_name, requested_room_note, submitted_at")
       .eq("dorm_id", dormId)
-      .eq("status", "pending"),
+      .eq("status", "pending")
+      .order("submitted_at", { ascending: true })
+      .limit(3),
   ]);
 
-  const tenantIds = ((tenants as TenantRow[] | null) ?? []).map((t) => t.id);
+  const roomRows = (rooms as RoomRow[] | null) ?? [];
+  const tenantRows = (tenants as TenantRow[] | null) ?? [];
+  const tenantIds = tenantRows.map((t) => t.id);
 
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
-
-  const [{ data: recentPayments }, { data: monthPayments }, { data: allPayments }] =
-    tenantIds.length
-      ? await Promise.all([
-          supabase
-            .from("payments")
-            .select("id, amount, paid_at, tenants(full_name)")
-            .in("tenant_id", tenantIds)
-            .order("paid_at", { ascending: false })
-            .limit(5),
-          supabase
-            .from("payments")
-            .select("amount")
-            .in("tenant_id", tenantIds)
-            .gte("paid_at", startOfMonth.toISOString()),
-          supabase.from("payments").select("amount").in("tenant_id", tenantIds),
-        ])
-      : [{ data: [] }, { data: [] }, { data: [] }];
+  const [{ data: recentPayments }, { data: allPayments }] = tenantIds.length
+    ? await Promise.all([
+        supabase
+          .from("payments")
+          .select("id, amount, paid_at, tenants(full_name)")
+          .in("tenant_id", tenantIds)
+          .order("paid_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("payments")
+          .select("amount, paid_at")
+          .in("tenant_id", tenantIds),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   // ------------------------------------------------------------
   // Derived stats — every number below comes straight from the
   // queries above; nothing here is fabricated or estimated.
   // ------------------------------------------------------------
 
-  const totalBeds = (rooms ?? []).reduce((sum, r) => sum + r.capacity, 0);
-  const occupiedBeds = ((tenants as TenantRow[] | null) ?? []).filter(
-    (t) => t.status === "active" && t.room_id
-  ).length;
+  const totalRooms = roomRows.length;
+  const occupiedRooms = roomRows.filter((r) => r.status === "full").length;
+  const roomCounts = {
+    available: roomRows.filter((r) => r.status === "available").length,
+    full: occupiedRooms,
+    maintenance: roomRows.filter((r) => r.status === "maintenance").length,
+    inactive: roomRows.filter((r) => r.status === "inactive").length,
+  };
 
-  const totalTenants = ((tenants as TenantRow[] | null) ?? []).length;
+  const activeTenants = tenantRows.filter((t) => t.status === "active");
 
-  // A room's own status is kept in sync by syncRoomStatus (see
-  // lib/actions.ts) after every assignment change, so it's already
-  // the authoritative "is this room open for a new tenant" signal --
-  // no need to re-derive it from occupancy here.
-  const roomsAvailable = (rooms ?? []).filter(
-    (r) => r.status === "available"
-  ).length;
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const collectedThisMonth = (monthPayments ?? []).reduce(
-    (sum, p) => sum + Number(p.amount),
-    0
-  );
+  const newActiveThisMonth = activeTenants.filter((t) => {
+    const movedIn = new Date(t.move_in_date + "T00:00:00");
+    return movedIn >= currentMonthStart && movedIn < currentMonthEnd;
+  }).length;
 
   // ------------------------------------------------------------
   // Financial summary — payments and transactions are two separate,
   // unlinked ledgers (payments = rent collected against bills;
-  // transactions = everything else). Total Income sums both, but
+  // transactions = everything else). Total income sums both, but
   // excludes any transaction logged under the 'rent' category: rent
   // income is already fully captured via payments/bills, so counting
   // a manually-logged 'rent' transaction too would double it. This is
@@ -154,23 +160,51 @@ export default async function AdminPage() {
   // createTransaction, which no longer offers 'rent' as an income
   // category for exactly this reason.
   // ------------------------------------------------------------
-  const totalPayments = (allPayments ?? []).reduce(
-    (sum, p) => sum + Number(p.amount),
-    0
-  );
-
+  const paymentRows = allPayments ?? [];
   const transactionRows = transactions ?? [];
 
-  const transactionIncome = transactionRows
-    .filter((t) => t.type === "income" && t.category !== "rent")
-    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const offset = 5 - i;
+    const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
+    return {
+      start,
+      end,
+      label: start.toLocaleDateString("en-PH", {
+        month: "short",
+        year: "2-digit",
+      }),
+    };
+  });
 
-  const totalExpenses = transactionRows
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const monthlyTrend = months.map(({ start, end, label }) => {
+    const income =
+      paymentRows
+        .filter((p) => {
+          const d = new Date(p.paid_at);
+          return d >= start && d < end;
+        })
+        .reduce((sum, p) => sum + Number(p.amount), 0) +
+      transactionRows
+        .filter((t) => {
+          if (t.type !== "income" || t.category === "rent") return false;
+          const d = new Date(t.occurred_at + "T00:00:00");
+          return d >= start && d < end;
+        })
+        .reduce((sum, t) => sum + Number(t.amount), 0);
 
-  const totalIncome = totalPayments + transactionIncome;
-  const netIncome = totalIncome - totalExpenses;
+    const expenses = transactionRows
+      .filter((t) => {
+        if (t.type !== "expense") return false;
+        const d = new Date(t.occurred_at + "T00:00:00");
+        return d >= start && d < end;
+      })
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    return { label, income, expenses };
+  });
+
+  const monthlyRevenue = monthlyTrend[monthlyTrend.length - 1]?.income ?? 0;
 
   const billsWithStatus = ((bills as BillRow[] | null) ?? []).map((b) => ({
     ...b,
@@ -184,27 +218,69 @@ export default async function AdminPage() {
       0
     );
 
-  const statusCounts = {
-    paid: 0,
-    partial: 0,
-    unpaid: 0,
-    overdue: 0,
-  } as Record<string, number>;
+  // ------------------------------------------------------------
+  // Needs attention — unifies three otherwise-disconnected signals
+  // (overdue bills, pending sign-up requests, rooms under maintenance)
+  // into one prioritized list instead of three separate UI blocks.
+  // ------------------------------------------------------------
+  const tenantNameById = new Map(tenantRows.map((t) => [t.id, t.full_name]));
+  const roomNumberById = new Map(roomRows.map((r) => [r.id, r.room_number]));
 
-  for (const bill of billsWithStatus) {
-    statusCounts[bill.displayStatus] =
-      (statusCounts[bill.displayStatus] ?? 0) + 1;
-  }
+  const overdueItems = billsWithStatus
+    .filter((b) => b.displayStatus === "overdue")
+    .map((b) => {
+      const daysOverdue = Math.floor(
+        (now.getTime() - new Date(b.due_date + "T00:00:00").getTime()) /
+          86_400_000
+      );
+      return {
+        key: `bill-${b.id}`,
+        icon: AlertTriangle,
+        iconClass: "text-status-overdue",
+        title: `Room ${
+          b.room_id ? roomNumberById.get(b.room_id) ?? "—" : "—"
+        } · ${formatMoney(Number(b.total_amount) - Number(b.amount_paid))}`,
+        detail: `${
+          tenantNameById.get(b.tenant_id) ?? "Unknown tenant"
+        } · ${daysOverdue}d overdue`,
+        href: "/admin/billing",
+      };
+    })
+    .sort((a, b) => (a.detail < b.detail ? 1 : -1));
 
-  const maintenanceRooms = (rooms ?? []).filter(
-    (r) => r.status === "maintenance"
-  );
+  const applicationItems = (pendingRequests ?? []).map((r) => ({
+    key: `request-${r.id}`,
+    icon: UserPlus,
+    iconClass: "text-status-partial",
+    title: r.full_name,
+    detail: r.requested_room_note
+      ? `Wants to join · ${r.requested_room_note}`
+      : "Wants to join your dormitory",
+    href: "/admin/tenant-requests",
+  }));
+
+  const maintenanceItems = roomRows
+    .filter((r) => r.status === "maintenance")
+    .map((r) => ({
+      key: `room-${r.id}`,
+      icon: Wrench,
+      iconClass: "text-status-partial",
+      title: `Room ${r.room_number}`,
+      detail: "Under maintenance",
+      href: "/admin/rooms",
+    }));
+
+  const attentionItems = [
+    ...overdueItems,
+    ...applicationItems,
+    ...maintenanceItems,
+  ].slice(0, 5);
 
   const ownerFirstName =
     (session.profile?.full_name ?? "").split(" ")[0] || "there";
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-5xl">
       {/* Header */}
       <div className="mb-6">
         <h1 className="font-heading text-lg font-semibold text-primary">
@@ -216,138 +292,92 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      {/* Summary row */}
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {/* Summary cards */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Total tenants</p>
-          <p className="mt-1 font-heading text-xl font-semibold text-foreground">
-            {totalTenants}
+          <div className="mb-2 flex items-center gap-2 text-foreground-muted">
+            <Building2 className="h-4 w-4" />
+            <p className="text-xs">Total rooms</p>
+          </div>
+          <p className="font-heading text-xl font-semibold text-foreground">
+            {totalRooms}
+          </p>
+          <p className="text-[11px] text-foreground-muted">
+            {occupiedRooms} occupied
           </p>
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Rooms available</p>
-          <p className="mt-1 font-heading text-xl font-semibold text-foreground">
-            {roomsAvailable}
+          <div className="mb-2 flex items-center gap-2 text-foreground-muted">
+            <Users className="h-4 w-4" />
+            <p className="text-xs">Active tenants</p>
+          </div>
+          <p className="font-heading text-xl font-semibold text-foreground">
+            {activeTenants.length}
+          </p>
+          <p className="text-[11px] text-foreground-muted">
+            {newActiveThisMonth > 0 ? `+${newActiveThisMonth} this month` : " "}
           </p>
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Pending sign-ups</p>
+          <div className="mb-2 flex items-center gap-2 text-foreground-muted">
+            <Banknote className="h-4 w-4" />
+            <p className="text-xs">Monthly revenue</p>
+          </div>
+          <p className="font-mono text-xl font-semibold text-status-paid">
+            {formatMoney(monthlyRevenue)}
+          </p>
+          <p className="text-[11px] text-foreground-muted">This month</p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="mb-2 flex items-center gap-2 text-foreground-muted">
+            <Receipt className="h-4 w-4" />
+            <p className="text-xs">Pending payments</p>
+          </div>
           <p
-            className={`mt-1 font-heading text-xl font-semibold ${
-              (pendingRequestsCount ?? 0) > 0
-                ? "text-status-partial"
-                : "text-foreground"
-            }`}
-          >
-            {pendingRequestsCount ?? 0}
-          </p>
-        </div>
-      </div>
-
-      {/* Stat cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Occupancy</p>
-          <p className="mt-1 font-heading text-xl font-semibold text-foreground">
-            {occupiedBeds}
-            <span className="text-sm font-normal text-foreground-muted">
-              /{totalBeds}
-            </span>
-          </p>
-          <p className="text-[11px] text-foreground-muted">beds occupied</p>
-        </div>
-
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Collected this month</p>
-          <p className="mt-1 font-mono text-xl font-semibold text-status-paid">
-            {formatMoney(collectedThisMonth)}
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Outstanding</p>
-          <p
-            className={`mt-1 font-mono text-xl font-semibold ${
+            className={`font-mono text-xl font-semibold ${
               outstandingTotal > 0 ? "text-status-overdue" : "text-foreground"
             }`}
           >
             {formatMoney(outstandingTotal)}
           </p>
+          <p className="text-[11px] text-foreground-muted">Outstanding</p>
         </div>
+      </div>
 
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs text-foreground-muted">Overdue bills</p>
-          <p
-            className={`mt-1 font-heading text-xl font-semibold ${
-              statusCounts.overdue > 0
-                ? "text-status-overdue"
-                : "text-foreground"
-            }`}
-          >
-            {statusCounts.overdue}
+      {/* Income vs Expenses + Room Occupancy */}
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-border bg-surface p-6">
+          <p className="mb-1 font-heading text-sm font-semibold">
+            Income vs Expenses
           </p>
+          <p className="mb-4 text-xs text-foreground-muted">Last 6 months</p>
+          <IncomeExpenseChart data={monthlyTrend} />
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-6">
+          <p className="mb-4 font-heading text-sm font-semibold">
+            Room Occupancy
+          </p>
+          <RoomOccupancyMeter counts={roomCounts} totalRooms={totalRooms} />
         </div>
       </div>
 
-      {/* Financial summary */}
-      <div className="mb-6">
-        <p className="mb-2 text-xs font-medium text-foreground-muted">
-          Financial summary (all-time)
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-foreground-muted">Total income</p>
-            <p className="mt-1 font-mono text-xl font-semibold text-status-paid">
-              {formatMoney(totalIncome)}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-foreground-muted">Total expenses</p>
-            <p className="mt-1 font-mono text-xl font-semibold text-status-overdue">
-              {formatMoney(totalExpenses)}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-foreground-muted">Net income</p>
-            <p
-              className={`mt-1 font-mono text-xl font-semibold ${
-                netIncome >= 0 ? "text-status-paid" : "text-status-overdue"
-              }`}
-            >
-              {formatMoney(netIncome)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Payment status breakdown */}
-      {billsWithStatus.length > 0 && (
-        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface px-4 py-3">
-          {(["paid", "partial", "unpaid", "overdue"] as const).map((status) => (
-            <div key={status} className="flex items-center gap-1.5 text-xs">
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${billStatusDotColors[status]}`}
-              />
-              <span className="text-foreground-muted">
-                {billStatusLabels[status]}
-              </span>
-              <span className="font-mono font-medium text-foreground">
-                {statusCounts[status] ?? 0}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {/* Recent payments */}
+      {/* Recent Payments + Needs Attention */}
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-surface overflow-hidden">
-          <div className="border-b border-border px-4 py-3 text-sm font-heading font-semibold">
-            Recent payments
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <span className="text-sm font-heading font-semibold">
+              Recent payments
+            </span>
+            <Link
+              href="/admin/payments"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              View all
+            </Link>
           </div>
           {recentPayments && recentPayments.length > 0 ? (
             <div>
@@ -386,37 +416,48 @@ export default async function AdminPage() {
             </div>
           ) : (
             <p className="px-4 py-6 text-center text-sm text-foreground-muted">
-              No payments recorded yet.
+              No payments yet. Payment activity will appear here once tenants
+              make payments.
             </p>
           )}
         </div>
 
-        {/* Rooms needing attention */}
         <div className="rounded-lg border border-border bg-surface overflow-hidden">
           <div className="border-b border-border px-4 py-3 text-sm font-heading font-semibold">
-            Rooms needing attention
+            Needs attention
           </div>
-          {maintenanceRooms.length > 0 ? (
+          {attentionItems.length > 0 ? (
             <div>
-              {maintenanceRooms.map((r, i) => (
-                <div
-                  key={r.id}
-                  className={`flex items-center justify-between px-4 py-3 ${
-                    i < maintenanceRooms.length - 1
-                      ? "border-b border-border"
-                      : ""
-                  }`}
-                >
-                  <p className="text-sm font-medium">Room {r.room_number}</p>
-                  <span className="rounded-full bg-status-partial/15 px-2.5 py-0.5 text-xs font-medium text-status-partial">
-                    {roomStatusLabels[r.status] ?? r.status}
-                  </span>
-                </div>
-              ))}
+              {attentionItems.map((item, i) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-muted ${
+                      i < attentionItems.length - 1
+                        ? "border-b border-border"
+                        : ""
+                    }`}
+                  >
+                    <Icon
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${item.iconClass}`}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {item.title}
+                      </p>
+                      <p className="truncate text-xs text-foreground-muted">
+                        {item.detail}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           ) : (
             <p className="px-4 py-6 text-center text-sm text-foreground-muted">
-              Nothing needs attention right now.
+              Nothing needs your attention right now.
             </p>
           )}
         </div>
