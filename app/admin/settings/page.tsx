@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import SettingsForm from "@/components/settings-form";
 
 export default async function AdminSettingsPage() {
@@ -14,7 +14,7 @@ export default async function AdminSettingsPage() {
     redirect("/tenant");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const dormId = session.profile?.dorm_id;
 

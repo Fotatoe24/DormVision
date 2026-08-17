@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, displayBillStatus } from "@/lib/billing";
 
 const tenantStatusStyles: Record<string, string> = {
@@ -30,7 +30,7 @@ export default async function TenantsPage({
   const dormId = session.profile?.dorm_id;
   if (!dormId) redirect("/");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let query = supabase
     .from("tenants")

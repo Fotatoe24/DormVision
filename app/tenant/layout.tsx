@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { TenantTopbar } from "@/components/tenant-topbar";
 
 export default async function TenantLayout({
@@ -13,7 +13,7 @@ export default async function TenantLayout({
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: dorm } = session.profile?.dorm_id
     ? await supabase

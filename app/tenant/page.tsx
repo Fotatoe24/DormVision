@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { updateTenantProfile, logout } from "@/lib/actions";
 import { SubmitButton } from "@/components/submit-button";
 import {
@@ -25,7 +25,7 @@ export default async function TenantPage({
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // ---------------------------------------------------------
   // Get the tenant record

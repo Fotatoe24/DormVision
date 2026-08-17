@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, displayBillStatus } from "@/lib/billing";
 
 type TenantRow = {
@@ -61,7 +61,7 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [{ data: dorm }, { data: rooms }, { data: tenants }, { data: bills }] =
     await Promise.all([

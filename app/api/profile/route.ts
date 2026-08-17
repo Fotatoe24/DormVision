@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { getSessionUser } from "@/lib/auth";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET_NAME = "avatars";
@@ -277,28 +275,31 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const verifyClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const admin = createAdminClient();
 
-    const { error: verifyError } = await verifyClient.auth.signInWithPassword({
-      email: session.user.email!,
-      password: currentPassword,
-    });
+    const { data: currentRecord, error: currentRecordError } = await admin
+      .from("users")
+      .select("password_hash")
+      .eq("id", session.user.id)
+      .single();
 
-    if (verifyError) {
+    if (
+      currentRecordError ||
+      !currentRecord?.password_hash ||
+      !(await verifyPassword(currentPassword, currentRecord.password_hash))
+    ) {
       return NextResponse.json(
         { error: "Current password is incorrect." },
         { status: 400 }
       );
     }
 
-    const supabase = await createServerClient();
+    const newPasswordHash = await hashPassword(newPassword);
 
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
+    const { error: updateError } = await admin
+      .from("users")
+      .update({ password_hash: newPasswordHash })
+      .eq("id", session.user.id);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 400 });

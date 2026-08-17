@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createRoom,
   updateRoomStatus,
@@ -37,7 +37,7 @@ export default async function RoomsPage({
   if (session.profile?.role !== "owner") redirect("/tenant");
 
   const dormId = session.profile.dorm_id;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: rooms } = await supabase
     .from("rooms")

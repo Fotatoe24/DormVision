@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   generateMonthlyBills,
   createBill,
@@ -40,7 +40,7 @@ export default async function BillingPage({
     redirect("/admin?error=No+dormitory+assigned");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // ============================================================
   // LOAD BILLS

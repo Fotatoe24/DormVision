@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileView } from "@/components/profile-view";
 
 export default async function ProfilePage() {
   const session = await getSessionUser();
   if (!session) redirect("/");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: me } = await supabase
     .from("users")

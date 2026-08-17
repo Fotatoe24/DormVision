@@ -2,14 +2,41 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/auth";
+import { headers, cookies } from "next/headers";
+import crypto from "crypto";
+import {
+  getSessionUser,
+  hashPassword,
+  verifyPassword,
+  createSessionToken,
+  AUTH_COOKIE_NAME,
+} from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPasswordResetEmail } from "@/lib/mailer";
 
 // ============================================================
 // AUTHENTICATION
+//
+// No Supabase Auth session exists anywhere in this app anymore —
+// login issues our own JWT (lib/jwt.ts) in an httpOnly cookie, and
+// every action below reaches Postgres through the service-role admin
+// client instead of the RLS-bound one, since RLS has nothing to key
+// off of without auth.uid(). Every query that used to lean on RLS for
+// scoping now does it explicitly (.eq("dorm_id", dormId) etc.).
 // ============================================================
+
+const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days, matches the JWT's own expiry
+
+async function setSessionCookie(token: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_COOKIE_MAX_AGE,
+    path: "/",
+  });
+}
 
 // Base URL for the current request. Falls back to the request's own
 // host so this works in dev/preview/prod without extra env config, but
@@ -27,60 +54,68 @@ async function getSiteOrigin() {
   return `${protocol}://${host}`;
 }
 
-// Where Supabase should send the user after they click an email link
-// (confirmation or password recovery) — always lands on /auth/callback,
-// optionally forwarding to a specific page once the session is set up.
-async function getAuthCallbackUrl(next?: string) {
-  const origin = await getSiteOrigin();
-  const url = `${origin}/auth/callback`;
-
-  return next ? `${url}?next=${encodeURIComponent(next)}` : url;
-}
-
 export async function login(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) {
     redirect("/?error=" + encodeURIComponent("Enter your email and password."));
   }
 
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data: user } = await admin
+    .from("users")
+    .select("id, email, full_name, role, dorm_id, password_hash")
+    .eq("email", email)
+    .maybeSingle();
 
-  if (error || !data.user) {
-    redirect(
-      "/?error=" + encodeURIComponent(error?.message ?? "Sign in failed.")
-    );
+  if (!user || !user.password_hash) {
+    redirect("/?error=" + encodeURIComponent("Invalid email or password."));
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", data.user.id)
-    .single();
+  const valid = await verifyPassword(password, user.password_hash);
 
-  redirect(profile?.role === "owner" ? "/admin" : "/tenant");
+  if (!valid) {
+    redirect("/?error=" + encodeURIComponent("Invalid email or password."));
+  }
+
+  const token = await createSessionToken({
+    id: user.id,
+    email: user.email,
+    fullName: user.full_name,
+    role: user.role,
+    dormId: user.dorm_id,
+  });
+
+  await setSessionCookie(token);
+
+  redirect(user.role === "owner" ? "/admin" : "/tenant");
 }
 
 export async function logout() {
-  const supabase = await createClient();
-
-  await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete(AUTH_COOKIE_NAME);
 
   redirect("/");
 }
 
 // ============================================================
 // PASSWORD RESET
+//
+// Fully custom now — no Supabase recovery links. A random token lives
+// on public.users (reset_token / reset_token_expires, see
+// supabase/migrations/0004_custom_auth.sql) with a 1-hour expiry, and
+// /reset-password reads it from the URL and posts it back as a hidden
+// field.
 // ============================================================
 
 export async function requestPasswordReset(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
 
   if (!email) {
     redirect(
@@ -88,11 +123,34 @@ export async function requestPasswordReset(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: await getAuthCallbackUrl("/reset-password"),
-  });
+  const { data: user } = await admin
+    .from("users")
+    .select("id, full_name, email")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (user) {
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    const { error: tokenError } = await admin
+      .from("users")
+      .update({ reset_token: token, reset_token_expires: expiresAt })
+      .eq("id", user.id);
+
+    if (!tokenError) {
+      const origin = await getSiteOrigin();
+      const resetLink = `${origin}/reset-password?token=${token}`;
+
+      // Best-effort — a delivery failure shouldn't leak whether the
+      // account exists, so it falls through to the same message below.
+      await sendPasswordResetEmail(user.email, user.full_name, resetLink).catch(
+        () => {}
+      );
+    }
+  }
 
   // Same message whether or not the email has an account — avoids
   // leaking which addresses are registered.
@@ -105,29 +163,76 @@ export async function requestPasswordReset(formData: FormData) {
 }
 
 export async function resetPassword(formData: FormData) {
+  const token = String(formData.get("token") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
 
-  if (!password || password.length < 6) {
+  if (!token) {
     redirect(
       "/reset-password?error=" +
+        encodeURIComponent("This reset link is invalid or has expired.")
+    );
+  }
+
+  const tokenQuery = `token=${encodeURIComponent(token)}`;
+
+  if (!password || password.length < 6) {
+    redirect(
+      `/reset-password?${tokenQuery}&error=` +
         encodeURIComponent("Password must be at least 6 characters.")
     );
   }
 
   if (password !== confirmPassword) {
     redirect(
-      "/reset-password?error=" + encodeURIComponent("Passwords don't match.")
+      `/reset-password?${tokenQuery}&error=` +
+        encodeURIComponent("Passwords don't match.")
     );
   }
 
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { error } = await supabase.auth.updateUser({ password });
+  const { data: user } = await admin
+    .from("users")
+    .select("id, email, full_name, role, dorm_id, reset_token_expires")
+    .eq("reset_token", token)
+    .maybeSingle();
 
-  if (error) {
-    redirect("/reset-password?error=" + encodeURIComponent(error.message));
+  if (
+    !user ||
+    !user.reset_token_expires ||
+    new Date(user.reset_token_expires) < new Date()
+  ) {
+    redirect(
+      "/reset-password?error=" +
+        encodeURIComponent("This reset link is invalid or has expired.")
+    );
   }
+
+  const passwordHash = await hashPassword(password);
+
+  const { error: updateError } = await admin
+    .from("users")
+    .update({
+      password_hash: passwordHash,
+      reset_token: null,
+      reset_token_expires: null,
+    })
+    .eq("id", user.id);
+
+  if (updateError) {
+    redirect("/reset-password?error=" + encodeURIComponent(updateError.message));
+  }
+
+  const sessionToken = await createSessionToken({
+    id: user.id,
+    email: user.email,
+    fullName: user.full_name,
+    role: user.role,
+    dormId: user.dorm_id,
+  });
+
+  await setSessionCookie(sessionToken);
 
   redirect(
     "/?success=" + encodeURIComponent("Password updated. You're signed in.")
@@ -141,69 +246,76 @@ export async function resetPassword(formData: FormData) {
 export async function signUpOwner(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
   const dormName = String(formData.get("dormName") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   const password = String(formData.get("password") ?? "");
 
   if (!fullName || !dormName || !email || !password) {
     redirect("/signup?error=" + encodeURIComponent("Fill in every field."));
   }
 
-  const supabase = await createClient();
-
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: await getAuthCallbackUrl(),
-      data: {
-        full_name: fullName,
-        dorm_name: dormName,
-        role: "owner",
-      },
-    },
-  });
-
-  if (signUpError || !signUpData.user) {
+  if (password.length < 6) {
     redirect(
       "/signup?error=" +
-        encodeURIComponent(signUpError?.message ?? "Could not create account.")
+        encodeURIComponent("Password must be at least 6 characters.")
     );
   }
 
-  const userId = signUpData.user.id;
   const admin = createAdminClient();
+
+  const { data: existing } = await admin
+    .from("users")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existing) {
+    redirect(
+      "/signup?error=" + encodeURIComponent("An account with that email already exists.")
+    );
+  }
+
+  const userId = crypto.randomUUID();
+  const passwordHash = await hashPassword(password);
 
   // Creates the users row, the dormitories row, and backfills
   // users.dorm_id all inside one Postgres transaction — see
-  // supabase/migrations/0003_create_owner_account_rpc.sql. Either all
-  // three writes land or none do; the only failure path left is
-  // deleting the just-created auth user.
-  const { error: createError } = await admin.rpc("create_owner_account", {
-    p_user_id: userId,
-    p_full_name: fullName,
-    p_email: email,
-    p_dorm_name: dormName,
-  });
+  // supabase/migrations/0003_create_owner_account_rpc.sql and
+  // 0005_owner_account_rpc_password_hash.sql. Either all three writes
+  // land or none do.
+  const { data: rpcResult, error: createError } = await admin.rpc(
+    "create_owner_account",
+    {
+      p_user_id: userId,
+      p_full_name: fullName,
+      p_email: email,
+      p_dorm_name: dormName,
+      p_password_hash: passwordHash,
+    }
+  );
 
-  if (createError) {
-    await admin.auth.admin.deleteUser(userId);
-
+  if (createError || !rpcResult || rpcResult.length === 0) {
     redirect(
       "/signup?error=" +
         encodeURIComponent(
-          "Could not create owner account: " + createError.message
+          "Could not create owner account: " +
+            (createError?.message ?? "unknown error")
         )
     );
   }
 
-  if (!signUpData.session) {
-    redirect(
-      "/signup?success=" +
-        encodeURIComponent(
-          "Account created! Please check your email to confirm your account before signing in."
-        )
-    );
-  }
+  const dormId = rpcResult[0].out_dorm_id as string;
+
+  const token = await createSessionToken({
+    id: userId,
+    email,
+    fullName,
+    role: "owner",
+    dormId,
+  });
+
+  await setSessionCookie(token);
 
   redirect("/admin");
 }
@@ -216,7 +328,9 @@ export async function signUpTenant(formData: FormData) {
   const fullName = String(formData.get("fullName") ?? "").trim();
   const dormCode = String(formData.get("dormCode") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   const password = String(formData.get("password") ?? "");
 
   if (!fullName || !dormCode || !email || !password) {
@@ -225,10 +339,16 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  if (password.length < 6) {
+    redirect(
+      "/signup/tenant?error=" +
+        encodeURIComponent("Password must be at least 6 characters.")
+    );
+  }
 
-  // Existing dorm lookup — unchanged
-  const { data: matches, error: lookupError } = await supabase.rpc(
+  const admin = createAdminClient();
+
+  const { data: matches, error: lookupError } = await admin.rpc(
     "lookup_dormitory_by_code",
     {
       p_code: dormCode,
@@ -246,23 +366,21 @@ export async function signUpTenant(formData: FormData) {
 
   const dormId = matches[0].id;
 
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: await getAuthCallbackUrl(),
-    },
-  });
+  const { data: existing } = await admin
+    .from("users")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
 
-  if (signUpError || !signUpData.user) {
+  if (existing) {
     redirect(
       "/signup/tenant?error=" +
-        encodeURIComponent(signUpError?.message ?? "Could not create account.")
+        encodeURIComponent("An account with that email already exists.")
     );
   }
 
-  const userId = signUpData.user.id;
-  const admin = createAdminClient();
+  const userId = crypto.randomUUID();
+  const passwordHash = await hashPassword(password);
 
   const { error: userError } = await admin.from("users").insert({
     id: userId,
@@ -271,11 +389,10 @@ export async function signUpTenant(formData: FormData) {
     email,
     phone: phone || null,
     dorm_id: dormId,
+    password_hash: passwordHash,
   });
 
   if (userError) {
-    await admin.auth.admin.deleteUser(userId);
-
     redirect(
       "/signup/tenant?error=" +
         encodeURIComponent(
@@ -293,7 +410,6 @@ export async function signUpTenant(formData: FormData) {
 
   if (tenantError) {
     await admin.from("users").delete().eq("id", userId);
-    await admin.auth.admin.deleteUser(userId);
 
     redirect(
       "/signup/tenant?error=" +
@@ -303,14 +419,15 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
-  if (!signUpData.session) {
-    redirect(
-      "/?success=" +
-        encodeURIComponent(
-          "Account created! Please check your email to confirm your account before signing in."
-        )
-    );
-  }
+  const token = await createSessionToken({
+    id: userId,
+    email,
+    fullName,
+    role: "tenant",
+    dormId,
+  });
+
+  await setSessionCookie(token);
 
   redirect("/tenant");
 }
@@ -336,9 +453,9 @@ export async function updateTenantProfile(formData: FormData) {
     formData.get("emergencyContactNumber") ?? ""
   ).trim();
 
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { error } = await supabase
+  const { error } = await admin
     .from("users")
     .update({
       phone: phone || null,
@@ -379,7 +496,7 @@ async function requireOwnerDormId() {
 // ============================================================
 
 async function syncRoomStatus(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   roomId: string,
   dormId: string
 ) {
@@ -428,7 +545,7 @@ export async function createRoom(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { error } = await supabase.from("rooms").insert({
     dorm_id: dormId,
@@ -457,7 +574,7 @@ export async function updateRoomStatus(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("rooms")
@@ -490,7 +607,7 @@ export async function deleteRoom(formData: FormData) {
     redirect("/admin/rooms");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { count } = await supabase
     .from("tenants")
@@ -539,7 +656,7 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: room, error: roomError } = await supabase
     .from("rooms")
@@ -604,7 +721,7 @@ export async function removeTenantFromRoom(formData: FormData) {
     redirect("/admin/rooms");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: updatedTenant, error: tenantSyncError } = await supabase
     .from("tenants")
@@ -645,7 +762,7 @@ export async function removeTenantFromRoom(formData: FormData) {
 export async function generateMonthlyBills() {
   const dormId = await requireOwnerDormId();
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const now = new Date();
 
@@ -850,7 +967,7 @@ export async function createBill(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // ----------------------------------------------------------
   // Verify tenant belongs to this dorm
@@ -929,7 +1046,7 @@ export async function recordPayment(formData: FormData) {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // ----------------------------------------------------------
   // Get bill and verify dorm ownership
@@ -1045,7 +1162,7 @@ export async function deleteBill(formData: FormData) {
     redirect("/admin/billing");
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // ----------------------------------------------------------
   // Only allow deletion of bills belonging to this dorm

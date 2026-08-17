@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { removeTenantFromRoom } from "@/lib/actions";
 import {
   formatMoney,
@@ -32,7 +32,7 @@ export async function TenantDetailContent({
   id: string;
   dormId: string;
 }) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: tenant } = await supabase
     .from("tenants")
