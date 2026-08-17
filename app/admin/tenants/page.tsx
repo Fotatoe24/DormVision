@@ -46,7 +46,7 @@ export default async function TenantsPage({
     query = query.eq("status", status);
   }
 
-  const { data: tenants } = await query;
+  const { data: tenants, error: tenantsError } = await query;
 
   const roomIds = Array.from(
     new Set(
@@ -56,22 +56,35 @@ export default async function TenantsPage({
     )
   );
 
-  const { data: rooms } = roomIds.length
+  const { data: rooms, error: roomsError } = roomIds.length
     ? await supabase.from("rooms").select("id, room_number").in("id", roomIds)
-    : { data: [] };
-
-  const roomNumberById = new Map(
-    (rooms ?? []).map((r) => [r.id, r.room_number])
-  );
+    : { data: [], error: null };
 
   const tenantIds = (tenants ?? []).map((t) => t.id);
 
-  const { data: bills } = tenantIds.length
+  const { data: bills, error: billsError } = tenantIds.length
     ? await supabase
         .from("bills")
         .select("tenant_id, status, due_date, total_amount, amount_paid")
         .in("tenant_id", tenantIds)
-    : { data: [] };
+    : { data: [], error: null };
+
+  const loadError =
+    tenantsError?.message || roomsError?.message || billsError?.message || null;
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
+          Could not load tenants: {loadError}
+        </div>
+      </div>
+    );
+  }
+
+  const roomNumberById = new Map(
+    (rooms ?? []).map((r) => [r.id, r.room_number])
+  );
 
   const balanceByTenant = new Map<string, number>();
   for (const bill of bills ?? []) {

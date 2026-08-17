@@ -121,11 +121,16 @@ export function AdminShell({
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Close menus when the route changes
-  useEffect(() => {
+  // Close menus when the route changes. Adjusted during render (React's
+  // recommended pattern for resetting state on a prop change) rather than
+  // in an effect — setState synchronously inside an effect body triggers
+  // an extra cascading render on every route change.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setDrawerOpen(false);
     setSettingsOpen(false);
-  }, [pathname]);
+  }
 
   // Handle mobile drawer keyboard behavior
   useEffect(() => {

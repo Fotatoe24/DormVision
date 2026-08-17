@@ -39,7 +39,7 @@ export default async function RoomsPage({
   const dormId = session.profile.dorm_id;
   const supabase = createAdminClient();
 
-  const { data: rooms } = await supabase
+  const { data: rooms, error: roomsError } = await supabase
     .from("rooms")
     .select("id, room_number, capacity, monthly_rate, status")
     .eq("dorm_id", dormId)
@@ -48,7 +48,7 @@ export default async function RoomsPage({
   // Dual-read tenant occupancy from `tenants` (the source of truth for
   // move-in/move-out state) instead of `users`. `tenants` has no email
   // column, so pull email from `users` via a profile_id -> id join map.
-  const { data: tenantRecords } = await supabase
+  const { data: tenantRecords, error: tenantRecordsError } = await supabase
     .from("tenants")
     .select("id, profile_id, full_name, room_id, status")
     .eq("dorm_id", dormId)
@@ -59,9 +59,25 @@ export default async function RoomsPage({
     .map((t) => t.profile_id)
     .filter((id): id is string => Boolean(id));
 
-  const { data: tenantUsers } = profileIds.length
+  const { data: tenantUsers, error: tenantUsersError } = profileIds.length
     ? await supabase.from("users").select("id, email").in("id", profileIds)
-    : { data: [] as { id: string; email: string }[] };
+    : { data: [] as { id: string; email: string }[], error: null };
+
+  const loadError =
+    roomsError?.message ||
+    tenantRecordsError?.message ||
+    tenantUsersError?.message ||
+    null;
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
+          Could not load rooms: {loadError}
+        </div>
+      </div>
+    );
+  }
 
   const emailByProfileId = new Map(
     (tenantUsers ?? []).map((u) => [u.id, u.email])
