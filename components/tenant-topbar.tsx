@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { logout } from "@/lib/actions";
 import Link from "next/link";
 import { Settings, User, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
@@ -51,46 +52,50 @@ export function TenantTopbar({ dormName }: { dormName?: string }) {
           </p>
         </div>
 
-        {/* Settings menu */}
-        <div ref={menuRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-label="Settings"
-            className={`flex items-center justify-center rounded-md border border-border bg-background p-2 text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing}`}
-          >
-            <Settings className="h-4 w-4" />
-          </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
 
-          {menuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-50 mt-2 w-44 rounded-lg border border-border bg-surface p-1.5 shadow-lg"
+          {/* Settings menu */}
+          <div ref={menuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              aria-label="Settings"
+              className={`flex items-center justify-center rounded-md border border-border bg-background p-2 text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing}`}
             >
-              <Link
-                href="/profile"
-                role="menuitem"
-                onClick={() => setMenuOpen(false)}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing}`}
-              >
-                <User className="h-4 w-4" />
-                Profile
-              </Link>
+              <Settings className="h-4 w-4" />
+            </button>
 
-              <form action={logout}>
-                <button
-                  type="submit"
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-50 mt-2 w-44 rounded-lg border border-border bg-surface p-1.5 shadow-lg"
+              >
+                <Link
+                  href="/profile"
                   role="menuitem"
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing}`}
                 >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-              </form>
-            </div>
-          )}
+                  <User className="h-4 w-4" />
+                  Profile
+                </Link>
+
+                <form action={logout}>
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

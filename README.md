@@ -10,22 +10,25 @@ DormVision is an integrated platform that replaces scattered manual and paper-ba
 
 - **Framework:** Next.js (App Router)
 - **Database:** [Supabase](https://supabase.com) (PostgreSQL)
-- **Auth:** Supabase Auth (admin login required; tenant login for bill viewing)
-- **Client/ORM:** `@supabase/supabase-js` (+ `@supabase/ssr` for server components)
-- **Styling:** _TBD_
+- **Auth:** Custom sessions — bcrypt password hashing + signed JWT cookies (`jose`), issued and verified entirely in application code. Supabase Auth is not used for login/session at all; the service-role client reaches Postgres directly, and each server action checks authorization explicitly (e.g. "does this dorm_id belong to the signed-in owner") rather than relying on Postgres RLS. RLS policies still exist on every table for schema-level correctness, but they're not the enforcement path in this app.
+- **Email:** Gmail SMTP via `nodemailer` (password reset)
+- **Client/ORM:** `@supabase/supabase-js` (service-role client only; no `@supabase/ssr`)
+- **Styling:** Tailwind CSS
 
 ---
 
 ## Core Features
 
 ### 1. Dormitory Management
-- Tenant registration & profiles
-- Room assignment (tenant → room/bed)
-- Room availability (capacity vs. occupied vs. open)
-- Occupancy records & history
+
+- Tenant registration → owner-approval workflow (a signup is a _request_ to join, not an active tenant, until the dorm owner approves it)
+- Room assignment and tenant transfer between rooms, with full assignment history
+- Room lifecycle: available / full / maintenance / inactive (owner-deactivatable), separate from occupancy
+- Editable room details (number, capacity, monthly rate) with occupancy-aware validation
 - Payment records (paid vs. balance)
 
 ### 2. Accounting Information System
+
 - Rent collection tracking (expected vs. actual)
 - Income recording
 - Expense recording
@@ -33,42 +36,43 @@ DormVision is an integrated platform that replaces scattered manual and paper-ba
 - Financial data management & summaries
 
 ### 3. Digital Billing
-- Automatic bill generation
+
+- Automatic monthly bill generation
 - Itemized billing details (rent + charges + total)
 - Due dates
 - Payment status (Paid / Partially Paid / Unpaid / Overdue)
 - Billing history
-- Online bill viewing for tenants (*viewing only — not online payment, unless scope is expanded*)
+- Online bill viewing for tenants (_viewing only — not online payment_)
 
 ### 4. Financial Monitoring
+
 - Rent collection monitoring
 - Outstanding balance monitoring
-- Income & expense monitoring
-- Cash-flow monitoring
+- Income & expense monitoring (Total Income / Total Expenses / Net Income on the Overview, with payments and manually-logged transactions reconciled against each other so rent is never double-counted)
 - Financial dashboard
-- Payment trends (multi-month)
+- Occupancy and collections trends (multi-month)
 
 ### 5. System Evaluation
+
 Not a feature — this is the testing phase for the finished system, assessed on:
+
 - Functionality
 - Usability
 - Reliability
 - (Optional) Performance, security, maintainability, compatibility — per chosen software-quality framework (e.g., ISO 25010)
 
-> **Note:** Not every sub-item above is a guaranteed feature. Items like automatic bill generation, cash-flow monitoring, and payment trends should be validated against actual user requirements and approved scope before implementation.
-
 ---
 
 ## Build Roadmap
 
-| Phase | Focus | Depends On |
-|---|---|---|
-| 0 | Project setup, DB schema, auth, core models (Tenant, Room, Payment, Bill, Transaction) | — |
-| 1 | Dormitory Management (rooms, tenants, assignment, occupancy) | Phase 0 |
-| 2 | Digital Billing (generation, status, history, tenant view) | Phase 1 |
-| 3 | Accounting (payments, income/expense, transaction history) | Phase 2 |
-| 4 | Financial Monitoring (dashboard, balances, trends) | Phase 2–3 |
-| 5 | Polish & Evaluation prep (UX, reliability, quality testing) | Phase 4 |
+| Phase | Focus                                                                                  | Status                                                                                                                                                                             |
+| ----- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Project setup, DB schema, auth, core models (Tenant, Room, Payment, Bill, Transaction) | ✅ Done                                                                                                                                                                            |
+| 1     | Dormitory Management (rooms, tenants, assignment, occupancy)                           | ✅ Done — includes tenant registration approval, room transfer, editable rooms                                                                                                     |
+| 2     | Digital Billing (generation, status, history, tenant view)                             | ✅ Done                                                                                                                                                                            |
+| 3     | Accounting (payments, income/expense, transaction history)                             | ✅ Done                                                                                                                                                                            |
+| 4     | Financial Monitoring (dashboard, balances, trends)                                     | ✅ Done                                                                                                                                                                            |
+| 5     | Polish & Evaluation prep (UX, reliability, quality testing)                            | 🟡 In progress — accessibility, responsive layout, error/loading states, and query-performance passes are done; a full human usability/reliability evaluation is still outstanding |
 
 ---
 
@@ -81,20 +85,27 @@ cd dormvision
 
 # Install dependencies
 npm install
-
-# Install Supabase client libraries
-npm install @supabase/supabase-js @supabase/ssr
-
-# Set up environment variables
-cp .env.example .env.local
 ```
 
-Add your Supabase project credentials to `.env.local`:
+### Environment variables
+
+Create `.env.local` with:
 
 ```bash
+# Supabase (service-role client; used server-side only)
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key   # server-side only, keep secret
+
+# Custom auth
+JWT_SECRET=                                        # e.g. `openssl rand -base64 32` — no insecure default on purpose
+
+# Password reset email (Gmail SMTP)
+GMAIL_USER=your-gmail-address
+GMAIL_APP_PASSWORD=your-gmail-app-password          # not your regular password — generate an App Password
+
+# Optional: pins links (password reset, etc.) to one host across previews/multiple domains
+NEXT_PUBLIC_SITE_URL=
 ```
 
 ```bash
@@ -106,13 +117,10 @@ Open [http://localhost:3000](http://localhost:3000) to view the app.
 
 ### Setting Up Supabase
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. Grab your Project URL and API keys from **Project Settings → API**
-3. Create the core tables (`tenants`, `rooms`, `payments`, `bills`, `transactions`) via the Supabase Table Editor or SQL Editor — a starter schema can go in `supabase/migrations/`
-4. Enable **Row Level Security (RLS)** on every table and write policies so:
-   - Admins have full read/write access
-   - Tenants can only read their own bill/payment records
-5. Use Supabase Auth for login — separate admin and tenant roles (e.g., via a `role` column on a `profiles` table, or Supabase custom claims)
+1. Create a project at [supabase.com](https://supabase.com).
+2. Grab your Project URL and API keys from **Project Settings → API**.
+3. Apply every migration in `supabase/migrations/`, in numeric order, via the SQL Editor or the Supabase CLI. Pushing the `.sql` files to git does not run them — this is a separate, explicit step against your actual database.
+4. RLS is enabled on every table for schema-level correctness, but application authorization does **not** depend on it (see Tech Stack above) — every read/write goes through the service-role client with the owner/tenant/dorm check made explicitly in the server action. Don't rely on RLS alone if you extend this app with a client that talks to Supabase directly.
 
 ---
 
@@ -121,22 +129,29 @@ Open [http://localhost:3000](http://localhost:3000) to view the app.
 ```
 dormvision/
 ├── app/
-│   ├── (auth)/            # Login/auth routes
-│   ├── (admin)/           # Admin dashboard & management
-│   │   ├── tenants/
-│   │   ├── rooms/
-│   │   ├── billing/
-│   │   └── monitoring/
-│   ├── (tenant)/          # Tenant-facing views (bill viewing)
-│   └── api/                # API routes
+│   ├── login/, signup/            # Auth entry points (owner + tenant signup)
+│   ├── forgot-password/, reset-password/
+│   ├── admin/                     # Owner dashboard & management
+│   │   ├── page.tsx               # Overview (occupancy, financial summary)
+│   │   ├── rooms/, tenants/, tenant-requests/
+│   │   ├── billing/, payments/, expenses/
+│   │   ├── monitoring/, settings/
+│   │   └── @modal/                # Intercepted-route tenant detail modal
+│   ├── tenant/                    # Tenant-facing dashboard + registration status
+│   ├── profile/                   # Shared account settings (owner + tenant)
+│   └── api/                       # Route handlers (profile updates, avatar upload)
 ├── lib/
+│   ├── actions.ts                 # Server actions — the bulk of the app's business logic
+│   ├── auth.ts, jwt.ts            # Session issuing/verification (bcrypt + jose)
+│   ├── mailer.ts                  # Password reset email
+│   ├── tenant-status.ts           # Single source of truth for "is this an approved tenant"
+│   ├── billing.ts                 # Shared money/date formatting + bill status logic
 │   └── supabase/
-│       ├── client.ts        # Browser Supabase client
-│       ├── server.ts        # Server-side Supabase client (SSR)
-│       └── middleware.ts    # Session refresh middleware
+│       ├── admin.ts               # Service-role client (used everywhere server-side)
+│       └── client.ts              # Browser client (currently unused)
 ├── supabase/
-│   └── migrations/          # SQL schema & migrations
-├── components/              # Shared UI components
+│   └── migrations/                # SQL schema & migrations, applied in numeric order
+├── components/                    # Shared UI components
 └── README.md
 ```
 
@@ -144,13 +159,14 @@ dormvision/
 
 ## Traceability: Problem → Feature
 
-| Actual Problem | Requirement | DormVision Feature | Evaluated By |
-|---|---|---|---|
-| Manual payment recording | Centralized payment records | Payment Management | Functionality, Usability |
-| Difficult room monitoring | Updated room availability | Room Management | Functionality, Usability |
-| Manual bill preparation | Digital billing | Billing Module | Functionality, Reliability |
-| Difficult balance monitoring | Outstanding-balance tracking | Financial Monitoring | Functionality, Usability |
-| Scattered financial information | Centralized financial records | Financial Dashboard | Functionality, Usability |
+| Actual Problem                                             | Requirement                                      | DormVision Feature           | Evaluated By               |
+| ---------------------------------------------------------- | ------------------------------------------------ | ---------------------------- | -------------------------- |
+| Manual payment recording                                   | Centralized payment records                      | Payment Management           | Functionality, Usability   |
+| Difficult room monitoring                                  | Updated room availability                        | Room Management              | Functionality, Usability   |
+| Manual bill preparation                                    | Digital billing                                  | Billing Module               | Functionality, Reliability |
+| Difficult balance monitoring                               | Outstanding-balance tracking                     | Financial Monitoring         | Functionality, Usability   |
+| Scattered financial information                            | Centralized financial records                    | Financial Dashboard          | Functionality, Usability   |
+| Unvetted tenant signups affecting occupancy/financial data | Owner approval before someone counts as a tenant | Tenant Registration Requests | Functionality, Reliability |
 
 ---
 

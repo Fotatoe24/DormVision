@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -130,6 +131,19 @@ export default async function TenantPage({
   return (
     <>
       <div className="mx-auto max-w-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <p className="font-heading text-sm font-semibold text-foreground">
+            My dashboard
+          </p>
+
+          <Link
+            href="/profile"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Edit profile
+          </Link>
+        </div>
+
         {/* Room info */}
         <div className="mb-6 rounded-lg border border-border bg-surface p-6">
           <p className="mb-3 font-heading text-sm font-semibold">My room</p>

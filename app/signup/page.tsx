@@ -81,7 +81,11 @@ export default function OwnerSignUpPage() {
               minLength={6}
               placeholder="••••••••"
               className={inputClass}
+              ariaDescribedBy="password-hint"
             />
+            <p id="password-hint" className="mt-1.5 text-[11px] text-foreground-muted">
+              At least 6 characters.
+            </p>
           </div>
 
           <SubmitButton

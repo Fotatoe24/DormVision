@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions";
 import { Settings, User, LogOut, ChevronDown } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type NavItem = {
   label: string;
@@ -177,6 +178,10 @@ export function AdminShell({
 
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
+      <div className="mb-2 flex justify-end">
+        <ThemeToggle />
+      </div>
+
       <div className="relative">
         <button
           type="button"
@@ -299,28 +304,32 @@ export function AdminShell({
               </p>
             </div>
 
-            <button
-              ref={menuButtonRef}
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Open menu"
-              aria-expanded={drawerOpen}
-              className={`rounded-md border border-border p-1.5 text-foreground-muted hover:text-foreground ${focusRing}`}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+
+              <button
+                ref={menuButtonRef}
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open menu"
+                aria-expanded={drawerOpen}
+                className={`rounded-md border border-border p-1.5 text-foreground-muted hover:text-foreground ${focusRing}`}
               >
-                <path d="M3 6h18M3 12h18M3 18h18" />
-              </svg>
-            </button>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 6h18M3 12h18M3 18h18" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Main content */}

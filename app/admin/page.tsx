@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, displayBillStatus, formatPaymentDate } from "@/lib/billing";
+import { CopyButton } from "@/components/copy-button";
 
 type TenantRow = {
   id: string;
@@ -62,6 +63,7 @@ export default async function AdminPage() {
     { data: tenants },
     { data: bills },
     { data: transactions },
+    { count: pendingRequestsCount },
   ] = await Promise.all([
     supabase
       .from("dormitories")
@@ -84,6 +86,11 @@ export default async function AdminPage() {
       .from("transactions")
       .select("type, category, amount")
       .eq("dorm_id", dormId),
+    supabase
+      .from("tenant_registration_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("dorm_id", dormId)
+      .eq("status", "pending"),
   ]);
 
   const tenantIds = ((tenants as TenantRow[] | null) ?? []).map((t) => t.id);
@@ -118,6 +125,16 @@ export default async function AdminPage() {
   const totalBeds = (rooms ?? []).reduce((sum, r) => sum + r.capacity, 0);
   const occupiedBeds = ((tenants as TenantRow[] | null) ?? []).filter(
     (t) => t.status === "active" && t.room_id
+  ).length;
+
+  const totalTenants = ((tenants as TenantRow[] | null) ?? []).length;
+
+  // A room's own status is kept in sync by syncRoomStatus (see
+  // lib/actions.ts) after every assignment change, so it's already
+  // the authoritative "is this room open for a new tenant" signal --
+  // no need to re-derive it from occupancy here.
+  const roomsAvailable = (rooms ?? []).filter(
+    (r) => r.status === "available"
   ).length;
 
   const collectedThisMonth = (monthPayments ?? []).reduce(
@@ -197,6 +214,36 @@ export default async function AdminPage() {
           Here&apos;s what&apos;s happening with{" "}
           {dorm?.name ?? "your dormitory"}.
         </p>
+      </div>
+
+      {/* Summary row */}
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <p className="text-xs text-foreground-muted">Total tenants</p>
+          <p className="mt-1 font-heading text-xl font-semibold text-foreground">
+            {totalTenants}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <p className="text-xs text-foreground-muted">Rooms available</p>
+          <p className="mt-1 font-heading text-xl font-semibold text-foreground">
+            {roomsAvailable}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <p className="text-xs text-foreground-muted">Pending sign-ups</p>
+          <p
+            className={`mt-1 font-heading text-xl font-semibold ${
+              (pendingRequestsCount ?? 0) > 0
+                ? "text-status-partial"
+                : "text-foreground"
+            }`}
+          >
+            {pendingRequestsCount ?? 0}
+          </p>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -383,10 +430,16 @@ export default async function AdminPage() {
         <p className="mb-3 text-sm text-foreground-muted">
           Share this Dorm ID so tenants can sign themselves up.
         </p>
-        <div className="inline-flex items-center gap-2 rounded-md bg-surface-muted px-3 py-2">
-          <span className="font-mono text-sm tracking-wider text-accent">
-            {dorm?.join_code ?? "—"}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-md bg-surface-muted px-3 py-2">
+            <span className="font-mono text-sm tracking-wider text-accent">
+              {dorm?.join_code ?? "—"}
+            </span>
+          </div>
+
+          {dorm?.join_code && (
+            <CopyButton value={dorm.join_code} label="Copy Dorm ID" />
+          )}
         </div>
       </div>
     </div>

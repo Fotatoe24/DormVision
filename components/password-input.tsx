@@ -12,6 +12,7 @@ export function PasswordInput({
   className,
   value,
   onChange,
+  ariaDescribedBy,
 }: {
   id: string;
   name: string;
@@ -22,6 +23,7 @@ export function PasswordInput({
   className?: string;
   value?: string;
   onChange?: (value: string) => void;
+  ariaDescribedBy?: string;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -37,6 +39,7 @@ export function PasswordInput({
         placeholder={placeholder}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+        aria-describedby={ariaDescribedBy}
         className={`${className ?? ""} pr-10`}
       />
       <button
