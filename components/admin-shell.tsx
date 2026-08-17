@@ -16,9 +16,9 @@ const navItems: NavItem[] = [
   { label: "Rooms", href: "/admin/rooms" },
   { label: "Tenants", href: "/admin/tenants" },
   { label: "Billing", href: "/admin/billing" },
-  { label: "Payments" },
-  { label: "Expenses" },
-  { label: "Monitoring" },
+  { label: "Payments", href: "/admin/payments" },
+  { label: "Expenses", href: "/admin/expenses" },
+  { label: "Monitoring", href: "/admin/monitoring" },
 ];
 
 const focusRing =

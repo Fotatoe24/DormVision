@@ -1210,3 +1210,105 @@ export async function deleteBill(formData: FormData) {
 
   redirect("/admin/billing?saved=1");
 }
+
+// ============================================================
+// EXPENSES / INCOME (public.transactions)
+// ============================================================
+
+const TRANSACTION_TYPES = ["income", "expense"] as const;
+
+const TRANSACTION_CATEGORIES = [
+  "rent",
+  "other_income",
+  "utilities",
+  "repairs",
+  "supplies",
+  "other_expense",
+] as const;
+
+export async function createTransaction(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const type = String(formData.get("type") ?? "");
+  const category = String(formData.get("category") ?? "");
+  const amount = Number(formData.get("amount"));
+  const description = String(formData.get("description") ?? "").trim();
+  const occurredAt = String(formData.get("occurredAt") ?? "").trim();
+
+  if (!TRANSACTION_TYPES.includes(type as (typeof TRANSACTION_TYPES)[number])) {
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Invalid transaction type.")
+    );
+  }
+
+  if (
+    !TRANSACTION_CATEGORIES.includes(
+      category as (typeof TRANSACTION_CATEGORIES)[number]
+    )
+  ) {
+    redirect("/admin/expenses?error=" + encodeURIComponent("Invalid category."));
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Enter a valid amount.")
+    );
+  }
+
+  if (!occurredAt) {
+    redirect("/admin/expenses?error=" + encodeURIComponent("Pick a date."));
+  }
+
+  const session = await getSessionUser();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.from("transactions").insert({
+    type,
+    category,
+    amount,
+    description: description || null,
+    occurred_at: occurredAt,
+    dorm_id: dormId,
+    recorded_by: session!.user.id,
+  });
+
+  if (error) {
+    redirect(
+      "/admin/expenses?error=" +
+        encodeURIComponent("Could not record transaction: " + error.message)
+    );
+  }
+
+  revalidatePath("/admin/expenses");
+
+  redirect("/admin/expenses?saved=1");
+}
+
+export async function deleteTransaction(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const transactionId = String(formData.get("transactionId") ?? "");
+
+  if (!transactionId) {
+    redirect("/admin/expenses");
+  }
+
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", transactionId)
+    .eq("dorm_id", dormId);
+
+  if (error) {
+    redirect(
+      "/admin/expenses?error=" +
+        encodeURIComponent("Could not delete transaction: " + error.message)
+    );
+  }
+
+  revalidatePath("/admin/expenses");
+
+  redirect("/admin/expenses?saved=1");
+}
