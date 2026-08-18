@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { TenantTopbar } from "@/components/tenant-topbar";
+import { TenantShell } from "@/components/tenant-shell";
 
 export default async function TenantLayout({
   children,
@@ -23,12 +23,5 @@ export default async function TenantLayout({
         .maybeSingle()
     : { data: null };
 
-  return (
-    <div className="flex min-h-full flex-1 flex-col">
-      <TenantTopbar dormName={dorm?.name} />
-      <main className="flex-1 bg-background px-6 py-10 text-foreground">
-        {children}
-      </main>
-    </div>
-  );
+  return <TenantShell dormName={dorm?.name}>{children}</TenantShell>;
 }
