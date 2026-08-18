@@ -39,3 +39,73 @@ export function displayBillStatus(bill: { status: string; due_date: string }) {
   if (bill.status !== "paid" && isPastDue) return "overdue";
   return bill.status;
 }
+
+export const paymentMethodLabels: Record<string, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  gcash: "GCash",
+  other: "Other",
+};
+
+export type StandingBill = {
+  due_date: string;
+  status: string;
+  total_amount: number | string;
+  amount_paid: number | string;
+};
+
+export type AccountStanding = {
+  status: "current" | "pending" | "partial" | "overdue";
+  balance: number;
+  nextBill: StandingBill | null;
+  /** Negative when overdue, 0 when due today, positive days remaining otherwise. */
+  daysUntilDue: number | null;
+};
+
+// Single source of truth for "how is this tenant's account doing right
+// now" — derived from bills the same way displayBillStatus derives a
+// single bill's overdue state, so the dashboard's summary card and the
+// per-bill list below it can never disagree with each other.
+export function getAccountStanding(bills: StandingBill[]): AccountStanding {
+  const outstanding = bills.filter(
+    (b) => Number(b.total_amount) - Number(b.amount_paid) > 0.004
+  );
+
+  const balance = outstanding.reduce(
+    (sum, b) => sum + (Number(b.total_amount) - Number(b.amount_paid)),
+    0
+  );
+
+  if (outstanding.length === 0) {
+    return {
+      status: "current",
+      balance: 0,
+      nextBill: null,
+      daysUntilDue: null,
+    };
+  }
+
+  const sorted = [...outstanding].sort(
+    (a, b) =>
+      new Date(a.due_date + "T00:00:00").getTime() -
+      new Date(b.due_date + "T00:00:00").getTime()
+  );
+  const nextBill = sorted[0];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(nextBill.due_date + "T00:00:00");
+  const daysUntilDue = Math.round((due.getTime() - today.getTime()) / 86400000);
+
+  const isOverdue = outstanding.some((b) => displayBillStatus(b) === "overdue");
+  const isPartial =
+    !isOverdue && outstanding.some((b) => b.status === "partial");
+
+  const status: AccountStanding["status"] = isOverdue
+    ? "overdue"
+    : isPartial
+    ? "partial"
+    : "pending";
+
+  return { status, balance, nextBill, daysUntilDue };
+}

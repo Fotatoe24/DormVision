@@ -1,14 +1,11 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney, formatPaymentDate } from "@/lib/billing";
-
-const methodLabels: Record<string, string> = {
-  cash: "Cash",
-  bank_transfer: "Bank transfer",
-  gcash: "GCash",
-  other: "Other",
-};
+import {
+  formatMoney,
+  formatPaymentDate,
+  paymentMethodLabels as methodLabels,
+} from "@/lib/billing";
 
 export default async function PaymentsPage({
   searchParams,
@@ -107,10 +104,7 @@ export default async function PaymentsPage({
       </div>
 
       {/* Search + filter */}
-      <form
-        className="mb-4 flex flex-wrap gap-2"
-        action="/admin/payments"
-      >
+      <form className="mb-4 flex flex-wrap gap-2" action="/admin/payments">
         <input
           type="text"
           name="q"
