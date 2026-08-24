@@ -39,11 +39,18 @@ function BrandMark() {
 function AccountMenu({
   ownerName,
   align = "left",
+  direction = "down",
   open,
   onOpenChange,
 }: {
   ownerName?: string;
   align?: "left" | "right";
+  // "down" (opens below the trigger) suits the mobile header, which
+  // sits at the top of the screen. The desktop sidebar footer sits at
+  // the *bottom* of a full-height sidebar, so its trigger needs "up" --
+  // opening downward there pushed the menu (Sign out included) below
+  // the viewport entirely, invisible and unreachable.
+  direction?: "down" | "up";
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -74,9 +81,9 @@ function AccountMenu({
       {open && (
         <div
           role="menu"
-          className={`absolute z-50 mt-2 w-48 rounded-lg border border-border bg-surface p-1.5 shadow-lg ${
+          className={`absolute z-50 w-48 rounded-lg border border-border bg-surface p-1.5 shadow-lg ${
             align === "right" ? "right-0" : "left-0"
-          }`}
+          } ${direction === "up" ? "bottom-full mb-2" : "mt-2"}`}
         >
           <Link
             href="/profile"
@@ -152,6 +159,7 @@ export function AdminShell({
       </div>
       <AccountMenu
         ownerName={ownerName}
+        direction="up"
         open={accountOpen}
         onOpenChange={setAccountOpen}
       />
