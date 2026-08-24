@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  formatMoney,
-  formatPaymentDate,
-  paymentMethodLabels as methodLabels,
-} from "@/lib/billing";
+import { confirmPendingPayment, rejectPendingPayment } from "@/lib/actions";
+import { formatMoney, formatBillDate, formatPaymentDate } from "@/lib/billing";
+
+const methodLabels: Record<string, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  gcash: "GCash",
+  other: "Other",
+};
 
 export default async function PaymentsPage({
   searchParams,
@@ -60,6 +64,7 @@ export default async function PaymentsPage({
   let paymentsQuery = supabase
     .from("payments")
     .select("id, tenant_id, amount, method, paid_at, notes")
+    .eq("status", "confirmed")
     .order("paid_at", { ascending: false });
 
   if (method && ["cash", "bank_transfer", "gcash", "other"].includes(method)) {
@@ -88,6 +93,29 @@ export default async function PaymentsPage({
     );
   }
 
+  // Tenant-reported payments awaiting owner review -- see
+  // lib/actions.ts's reportPayment/confirmPendingPayment/
+  // rejectPendingPayment and migration 0011. Unfiltered by the search
+  // form above; this list is small by nature (at most one per bill)
+  // and needs to stay visible regardless of the confirmed-payments
+  // filters.
+  const allTenantIds = (tenants ?? []).map((t) => t.id);
+
+  const { data: pendingPayments, error: pendingError } = allTenantIds.length
+    ? await supabase
+        .from("payments")
+        .select(
+          "id, tenant_id, amount, method, paid_at, bills(due_date, billing_period_start)"
+        )
+        .eq("status", "pending")
+        .in("tenant_id", allTenantIds)
+        .order("paid_at", { ascending: true })
+    : { data: [], error: null };
+
+  if (pendingError) {
+    console.error("Pending payments load error:", pendingError);
+  }
+
   const total = (payments ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
   const hasFilters = Boolean(q || method || from || to);
 
@@ -103,8 +131,89 @@ export default async function PaymentsPage({
         </p>
       </div>
 
+      {/* ======================================================
+          PENDING PAYMENT CONFIRMATIONS
+          Tenant-reported "I've Paid" clicks, awaiting owner review.
+          Confirming applies the amount to the bill; rejecting leaves
+          the bill exactly as it was.
+      ====================================================== */}
+
+      {pendingPayments && pendingPayments.length > 0 && (
+        <div className="mb-6 rounded-lg border border-status-partial/30 bg-status-partial/5 overflow-hidden">
+          <div className="border-b border-status-partial/30 px-4 py-3">
+            <p className="font-heading text-sm font-semibold">
+              Pending payment confirmations
+            </p>
+            <p className="text-xs text-foreground-muted">
+              {pendingPayments.length} report(s) waiting for your review.
+            </p>
+          </div>
+
+          <div>
+            {pendingPayments.map((p, i) => {
+              const billRel = p.bills as
+                | { due_date: string; billing_period_start: string }
+                | { due_date: string; billing_period_start: string }[]
+                | null;
+              const bill = Array.isArray(billRel) ? billRel[0] : billRel;
+
+              return (
+                <div
+                  key={p.id}
+                  className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${
+                    i < pendingPayments.length - 1
+                      ? "border-b border-status-partial/20"
+                      : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {nameById.get(p.tenant_id) ?? "Unknown tenant"}
+                    </p>
+                    <p className="text-xs text-foreground-muted">
+                      {bill ? `Bill due ${formatBillDate(bill.due_date)} · ` : ""}
+                      Reported {formatPaymentDate(p.paid_at)} ·{" "}
+                      {methodLabels[p.method] ?? p.method}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-medium text-status-partial">
+                      {formatMoney(p.amount)}
+                    </span>
+
+                    <form action={confirmPendingPayment}>
+                      <input type="hidden" name="paymentId" value={p.id} />
+                      <button
+                        type="submit"
+                        className="rounded-md bg-status-paid px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
+                      >
+                        Confirm
+                      </button>
+                    </form>
+
+                    <form action={rejectPendingPayment}>
+                      <input type="hidden" name="paymentId" value={p.id} />
+                      <button
+                        type="submit"
+                        className="rounded-md border border-status-overdue/30 px-3 py-1.5 text-xs text-status-overdue hover:bg-status-overdue/10"
+                      >
+                        Reject
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Search + filter */}
-      <form className="mb-4 flex flex-wrap gap-2" action="/admin/payments">
+      <form
+        className="mb-4 flex flex-wrap gap-2"
+        action="/admin/payments"
+      >
         <input
           type="text"
           name="q"

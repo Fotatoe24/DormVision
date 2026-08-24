@@ -1827,6 +1827,293 @@ export async function recordPayment(formData: FormData) {
 }
 
 // ============================================================
+// TENANT-REPORTED PAYMENT CONFIRMATION WORKFLOW
+//
+// A tenant clicking "I've Paid" never touches bills.amount_paid or
+// bill status directly -- it only inserts a 'pending' row into the
+// same payments table recordPayment already writes to (see migration
+// 0011). Only confirmPendingPayment (below), run by the owner, ever
+// applies a tenant-reported amount to a bill. This mirrors the
+// existing tenant_registration_requests pattern: a report is a
+// request, not a fact, until reviewed.
+// ============================================================
+
+export async function reportPayment(formData: FormData) {
+  const session = await getSessionUser();
+
+  if (!session) {
+    redirect("/");
+  }
+
+  const billId = String(formData.get("billId") ?? "").trim();
+  const rawMethod = String(formData.get("method") ?? "cash").trim();
+  const validMethods = ["cash", "bank_transfer", "gcash", "other"];
+  const method = validMethods.includes(rawMethod) ? rawMethod : "cash";
+
+  if (!billId) {
+    redirect("/tenant?error=" + encodeURIComponent("Bill ID is required."));
+  }
+
+  const admin = createAdminClient();
+
+  const { data: tenant } = await admin
+    .from("tenants")
+    .select("id")
+    .eq("profile_id", session.user.id)
+    .maybeSingle();
+
+  if (!tenant) {
+    redirect("/tenant?error=" + encodeURIComponent("Tenant record not found."));
+  }
+
+  const { data: bill, error: billError } = await admin
+    .from("bills")
+    .select("id, total_amount, amount_paid")
+    .eq("id", billId)
+    .eq("tenant_id", tenant.id)
+    .single();
+
+  if (billError || !bill) {
+    redirect("/tenant?error=" + encodeURIComponent("Bill not found."));
+  }
+
+  const remaining = Number(bill.total_amount) - Number(bill.amount_paid);
+
+  if (remaining <= 0) {
+    redirect(
+      "/tenant?error=" + encodeURIComponent("This bill is already fully paid.")
+    );
+  }
+
+  // Checked here for a clear message; migration 0011's partial unique
+  // index (one pending row per bill) is the real backstop under a race.
+  const { data: existingPending } = await admin
+    .from("payments")
+    .select("id")
+    .eq("bill_id", bill.id)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (existingPending) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent(
+          "You already have a payment report pending review for this bill."
+        )
+    );
+  }
+
+  const { error: insertError } = await admin.from("payments").insert({
+    bill_id: bill.id,
+    tenant_id: tenant.id,
+    amount: remaining,
+    method,
+    paid_at: new Date().toISOString(),
+    recorded_by: session.user.id,
+    status: "pending",
+  });
+
+  if (insertError) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent(
+          "Could not submit payment report: " + insertError.message
+        )
+    );
+  }
+
+  revalidatePath("/tenant");
+  redirect(
+    "/tenant?saved=" +
+      encodeURIComponent("Payment reported. Your dorm owner will confirm it.")
+  );
+}
+
+export async function confirmPendingPayment(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const paymentId = String(formData.get("paymentId") ?? "").trim();
+
+  if (!paymentId) {
+    redirect(
+      "/admin/payments?error=" + encodeURIComponent("Payment ID is required.")
+    );
+  }
+
+  const admin = createAdminClient();
+
+  const { data: payment, error: paymentError } = await admin
+    .from("payments")
+    .select("id, bill_id, amount, status")
+    .eq("id", paymentId)
+    .single();
+
+  if (paymentError || !payment) {
+    redirect(
+      "/admin/payments?error=" + encodeURIComponent("Payment report not found.")
+    );
+  }
+
+  if (payment.status !== "pending") {
+    redirect(
+      "/admin/payments?error=" +
+        encodeURIComponent("This payment report was already reviewed.")
+    );
+  }
+
+  const { data: bill, error: billError } = await admin
+    .from("bills")
+    .select("id, total_amount, amount_paid")
+    .eq("id", payment.bill_id)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (billError || !bill) {
+    redirect(
+      "/admin/payments?error=" +
+        encodeURIComponent("Bill not found or access denied.")
+    );
+  }
+
+  const totalAmount = Number(bill.total_amount);
+  const currentPaid = Number(bill.amount_paid);
+  const remaining = totalAmount - currentPaid;
+  const reportedAmount = Number(payment.amount);
+
+  // The bill may have changed since this was reported (e.g. the owner
+  // recorded a separate payment in the meantime) -- don't silently
+  // clamp or overpay, surface it instead so the owner can reject and
+  // ask the tenant to resubmit, or handle it manually.
+  if (reportedAmount > remaining) {
+    redirect(
+      "/admin/payments?error=" +
+        encodeURIComponent(
+          `Reported amount (${reportedAmount.toFixed(
+            2
+          )}) exceeds the bill's current remaining balance (${remaining.toFixed(
+            2
+          )}). Reject this report and ask the tenant to resubmit, or record the payment manually.`
+        )
+    );
+  }
+
+  const newAmountPaid = currentPaid + reportedAmount;
+
+  const newStatus =
+    newAmountPaid >= totalAmount
+      ? "paid"
+      : newAmountPaid > 0
+      ? "partial"
+      : "unpaid";
+
+  const session = await getSessionUser();
+
+  const { error: updateBillError } = await admin
+    .from("bills")
+    .update({ amount_paid: newAmountPaid, status: newStatus })
+    .eq("id", bill.id)
+    .eq("dorm_id", dormId);
+
+  if (updateBillError) {
+    redirect(
+      "/admin/payments?error=" +
+        encodeURIComponent("Could not update bill: " + updateBillError.message)
+    );
+  }
+
+  const { error: updatePaymentError } = await admin
+    .from("payments")
+    .update({
+      status: "confirmed",
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: session!.user.id,
+    })
+    .eq("id", payment.id);
+
+  if (updatePaymentError) {
+    redirect(
+      "/admin/payments?error=" +
+        encodeURIComponent(
+          "Bill was updated but the report could not be marked confirmed: " +
+            updatePaymentError.message
+        )
+    );
+  }
+
+  revalidatePath("/admin/payments");
+  revalidatePath("/admin/billing");
+  revalidatePath("/admin");
+  redirect("/admin/payments?saved=" + encodeURIComponent("Payment confirmed."));
+}
+
+export async function rejectPendingPayment(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const paymentId = String(formData.get("paymentId") ?? "").trim();
+
+  if (!paymentId) {
+    redirect(
+      "/admin/payments?error=" + encodeURIComponent("Payment ID is required.")
+    );
+  }
+
+  const admin = createAdminClient();
+
+  const { data: payment, error: paymentError } = await admin
+    .from("payments")
+    .select("id, bill_id, status")
+    .eq("id", paymentId)
+    .single();
+
+  if (paymentError || !payment) {
+    redirect(
+      "/admin/payments?error=" + encodeURIComponent("Payment report not found.")
+    );
+  }
+
+  if (payment.status !== "pending") {
+    redirect(
+      "/admin/payments?error=" +
+        encodeURIComponent("This payment report was already reviewed.")
+    );
+  }
+
+  // payments has no dorm_id column of its own -- verify the underlying
+  // bill belongs to this owner's dorm before allowing the reject.
+  const { data: bill } = await admin
+    .from("bills")
+    .select("id")
+    .eq("id", payment.bill_id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (!bill) {
+    redirect("/admin/payments?error=" + encodeURIComponent("Access denied."));
+  }
+
+  const session = await getSessionUser();
+
+  const { error: updateError } = await admin
+    .from("payments")
+    .update({
+      status: "rejected",
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: session!.user.id,
+    })
+    .eq("id", payment.id);
+
+  if (updateError) {
+    redirect("/admin/payments?error=" + encodeURIComponent(updateError.message));
+  }
+
+  revalidatePath("/admin/payments");
+  revalidatePath("/tenant");
+  redirect(
+    "/admin/payments?saved=" + encodeURIComponent("Payment report rejected.")
+  );
+}
+
+// ============================================================
 // DELETE BILL
 // ============================================================
 

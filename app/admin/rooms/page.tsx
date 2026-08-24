@@ -144,7 +144,7 @@ export default async function RoomsPage({
         className="mb-6 rounded-lg border border-border bg-surface p-6"
       >
         <p className="mb-4 font-heading text-sm font-semibold">Add a room</p>
-        <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label htmlFor="roomNumber" className={labelClass}>
               Room number

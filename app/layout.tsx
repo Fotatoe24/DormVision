@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
@@ -25,6 +25,14 @@ export const metadata: Metadata = {
   title: "DormVision",
   description:
     "Dormitory Management and Accounting Information System with Digital Billing and Financial Monitoring",
+};
+
+// viewport-fit=cover is required for env(safe-area-inset-*) to resolve
+// to anything but 0 on notched/home-indicator devices — needed now that
+// AdminShell/TenantShell render a fixed bottom nav (see components/
+// bottom-nav.tsx).
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

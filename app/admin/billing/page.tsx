@@ -406,31 +406,52 @@ export default async function BillingPage({
 
                 {/* ACTIONS */}
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {status !== "paid" && (
-                    <form
-                      action={recordPayment}
-                      className="flex items-center gap-2"
-                    >
-                      <input type="hidden" name="billId" value={bill.id} />
+                    <>
+                      {/* Quick full-balance payment — same recordPayment
+                          action as the manual form below, just with the
+                          remaining balance pre-filled as a hidden amount
+                          so the owner doesn't have to type it. */}
+                      <form action={recordPayment}>
+                        <input type="hidden" name="billId" value={bill.id} />
+                        <input
+                          type="hidden"
+                          name="amount"
+                          value={remaining.toFixed(2)}
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-md bg-status-paid px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
+                        >
+                          Mark as Paid — {formatMoney(remaining)}
+                        </button>
+                      </form>
 
-                      <input
-                        type="number"
-                        name="amount"
-                        min={0}
-                        step="0.01"
-                        required
-                        placeholder="Amount"
-                        className="w-28 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
-                      />
-
-                      <button
-                        type="submit"
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
+                      <form
+                        action={recordPayment}
+                        className="flex items-center gap-2"
                       >
-                        Record payment
-                      </button>
-                    </form>
+                        <input type="hidden" name="billId" value={bill.id} />
+
+                        <input
+                          type="number"
+                          name="amount"
+                          min={0}
+                          step="0.01"
+                          required
+                          placeholder="Amount"
+                          className="w-28 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
+                        />
+
+                        <button
+                          type="submit"
+                          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-muted hover:text-foreground"
+                        >
+                          Record payment
+                        </button>
+                      </form>
+                    </>
                   )}
 
                   {Number(bill.amount_paid) === 0 && (

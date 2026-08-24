@@ -1,125 +1,95 @@
-import type { LucideIcon } from "lucide-react";
 import {
-  Home,
-  DoorOpen,
+  LayoutDashboard,
+  BedDouble,
   Users,
   UserPlus,
   Receipt,
   Banknote,
-  Wallet,
-  LineChart,
+  Coins,
+  BarChart3,
   Settings,
+  Home,
   User,
+  type LucideIcon,
 } from "lucide-react";
 
+// Single source of truth for the app's navigation — consumed by the
+// desktop sidebar, the mobile bottom nav, and the mobile "More" sheet,
+// so a route only ever gets added/renamed/reordered in one place.
+//
+// Every href here corresponds to a real page in app/ (checked against
+// the actual route tree, not the aspirational list in whatever design
+// brief prompted this file) — there is no "Accounting", "Reports", or
+// "Users" route in this app, so those labels don't appear. The closest
+// real equivalents (Expenses, Monitoring) keep their real names rather
+// than being relabeled to sound like something they aren't.
 export type NavItem = {
+  key: string;
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Numeric badge, e.g. pending tenant requests. */
-  badgeKey?: "pendingRequests";
-  /** Shown as a "Soon" pill instead of being a real link. */
-  comingSoon?: boolean;
+  badge?: "pendingRequests";
 };
 
 export type NavGroup = {
-  /** Optional small caps heading shown above the group on desktop. */
   label?: string;
   items: NavItem[];
 };
 
 export type NavConfig = {
-  /** Desktop sidebar — every real route, grouped. Nothing is hidden here. */
-  sidebar: NavGroup[];
-  /** Mobile bottom nav — max 4 destinations. Everything else goes in `more`. */
+  // Mobile bottom nav — capped at 4 by design (see components/bottom-nav.tsx).
   primary: NavItem[];
-  /** Mobile "More" sheet — grouped secondary destinations. */
-  more: NavGroup[];
+  // Mobile "More" sheet, grouped for scanability.
+  secondaryGroups: NavGroup[];
+  // Desktop sidebar — shows everything, grouped.
+  desktopGroups: NavGroup[];
 };
 
-// ---------------------------------------------------------------------------
-// Admin / Owner
-//
-// Only routes that actually exist under app/admin/** (plus /profile) are
-// listed here. Desktop shows all of them directly in the sidebar. Mobile
-// keeps the 4 most-used destinations on the bottom bar and tucks the rest
-// (Payments, Expenses, Monitoring, Tenant Requests, Settings) into "More".
-// ---------------------------------------------------------------------------
-
-const adminOverview: NavItem = { label: "Overview", href: "/admin", icon: Home };
-const adminRooms: NavItem = { label: "Rooms", href: "/admin/rooms", icon: DoorOpen };
-const adminTenants: NavItem = { label: "Tenants", href: "/admin/tenants", icon: Users };
-const adminTenantRequests: NavItem = {
+const dashboard: NavItem = { key: "dashboard", label: "Dashboard", href: "/admin", icon: LayoutDashboard };
+const rooms: NavItem = { key: "rooms", label: "Rooms", href: "/admin/rooms", icon: BedDouble };
+const tenants: NavItem = { key: "tenants", label: "Tenants", href: "/admin/tenants", icon: Users };
+const tenantRequests: NavItem = {
+  key: "tenant-requests",
   label: "Tenant Requests",
   href: "/admin/tenant-requests",
   icon: UserPlus,
-  badgeKey: "pendingRequests",
+  badge: "pendingRequests",
 };
-const adminBilling: NavItem = { label: "Billing", href: "/admin/billing", icon: Receipt };
-const adminPayments: NavItem = { label: "Payments", href: "/admin/payments", icon: Banknote };
-const adminExpenses: NavItem = { label: "Expenses", href: "/admin/expenses", icon: Wallet };
-const adminMonitoring: NavItem = { label: "Monitoring", href: "/admin/monitoring", icon: LineChart };
-const adminSettings: NavItem = { label: "Settings", href: "/admin/settings", icon: Settings };
+const billing: NavItem = { key: "billing", label: "Billing", href: "/admin/billing", icon: Receipt };
+const payments: NavItem = { key: "payments", label: "Payments", href: "/admin/payments", icon: Banknote };
+const expenses: NavItem = { key: "expenses", label: "Expenses", href: "/admin/expenses", icon: Coins };
+const monitoring: NavItem = { key: "monitoring", label: "Monitoring", href: "/admin/monitoring", icon: BarChart3 };
+const adminSettings: NavItem = { key: "settings", label: "Settings", href: "/admin/settings", icon: Settings };
 
 export const adminNavigation: NavConfig = {
-  sidebar: [
+  primary: [dashboard, rooms, tenants, billing],
+  secondaryGroups: [
+    { label: "Management", items: [tenantRequests, payments, expenses, monitoring] },
+    { label: "System", items: [adminSettings] },
+  ],
+  desktopGroups: [
     {
       label: "Main",
-      items: [
-        adminOverview,
-        adminRooms,
-        adminTenants,
-        adminTenantRequests,
-        adminBilling,
-        adminPayments,
-        adminExpenses,
-        adminMonitoring,
-      ],
+      items: [dashboard, rooms, tenants, tenantRequests, billing, payments, expenses, monitoring],
     },
-    {
-      label: "System",
-      items: [adminSettings],
-    },
-  ],
-  primary: [adminOverview, adminRooms, adminTenants, adminBilling],
-  more: [
-    {
-      label: "Management",
-      items: [adminPayments, adminExpenses, adminMonitoring, adminTenantRequests],
-    },
-    {
-      label: "System",
-      items: [adminSettings],
-    },
+    { label: "System", items: [adminSettings] },
   ],
 };
 
-// ---------------------------------------------------------------------------
-// Tenant
-//
-// Only /tenant (the tenant dashboard) and /profile currently exist for
-// tenants — there's no separate My Room / Payments / Requests page yet, so
-// none are invented here. The config is intentionally small; add items as
-// those routes are built and they'll automatically show up everywhere.
-// ---------------------------------------------------------------------------
-
-const tenantHome: NavItem = { label: "Home", href: "/tenant", icon: Home };
-const tenantProfile: NavItem = { label: "Profile", href: "/profile", icon: User };
+// Real tenant-facing routes: just /tenant (room + billing, all on one
+// page) and the shared /profile page. There is no separate "My Room",
+// "Payments", "Requests", or "Notifications" route to link to, so the
+// tenant nav stays honestly small rather than padded out with items
+// that go nowhere new.
+const tenantHome: NavItem = { key: "home", label: "Home", href: "/tenant", icon: Home };
+const tenantProfile: NavItem = { key: "profile", label: "Profile", href: "/profile", icon: User };
 
 export const tenantNavigation: NavConfig = {
-  sidebar: [{ items: [tenantHome, tenantProfile] }],
-  primary: [tenantHome],
-  more: [{ items: [tenantProfile] }],
+  primary: [tenantHome, tenantProfile],
+  secondaryGroups: [],
+  desktopGroups: [{ items: [tenantHome, tenantProfile] }],
 };
 
-export function isItemActive(pathname: string, item: NavItem) {
-  return item.href === "/admin" || item.href === "/tenant"
-    ? pathname === item.href
-    : pathname.startsWith(item.href);
-}
-
-export function isGroupActive(pathname: string, groups: NavGroup[]) {
-  return groups.some((group) =>
-    group.items.some((item) => isItemActive(pathname, item))
-  );
+export function allSecondaryItems(config: NavConfig): NavItem[] {
+  return config.secondaryGroups.flatMap((g) => g.items);
 }

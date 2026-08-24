@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { TenantShell } from "@/components/tenant-shell";
+import { getDormName } from "@/lib/shell-data";
 
 export default async function TenantLayout({
   children,
@@ -13,15 +13,7 @@ export default async function TenantLayout({
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
 
-  const supabase = createAdminClient();
+  const dormName = await getDormName(session.profile?.dorm_id);
 
-  const { data: dorm } = session.profile?.dorm_id
-    ? await supabase
-        .from("dormitories")
-        .select("name")
-        .eq("id", session.profile.dorm_id)
-        .maybeSingle()
-    : { data: null };
-
-  return <TenantShell dormName={dorm?.name}>{children}</TenantShell>;
+  return <TenantShell dormName={dormName}>{children}</TenantShell>;
 }
