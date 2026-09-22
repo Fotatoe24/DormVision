@@ -2,10 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney, displayBillStatus, formatPaymentDate } from "@/lib/billing";
+import {
+  formatMoney,
+  displayBillStatus,
+  formatPaymentDate,
+} from "@/lib/billing";
 import { CopyButton } from "@/components/copy-button";
 import { IncomeExpenseChart } from "@/components/income-expense-chart";
 import { RoomOccupancyMeter } from "@/components/room-occupancy-meter";
+// add to the lucide-react import
 import {
   Building2,
   Users,
@@ -14,6 +19,7 @@ import {
   AlertTriangle,
   UserPlus,
   Wrench,
+  ClipboardList,
 } from "lucide-react";
 
 type RoomRow = {
@@ -67,6 +73,7 @@ export default async function AdminPage() {
     { data: bills },
     { data: transactions },
     { data: pendingRequests },
+    { data: pendingMaintenanceRequests },
   ] = await Promise.all([
     supabase
       .from("dormitories")
@@ -83,7 +90,9 @@ export default async function AdminPage() {
       .eq("dorm_id", dormId),
     supabase
       .from("bills")
-      .select("id, status, due_date, total_amount, amount_paid, tenant_id, room_id")
+      .select(
+        "id, status, due_date, total_amount, amount_paid, tenant_id, room_id"
+      )
       .eq("dorm_id", dormId),
     supabase
       .from("transactions")
@@ -95,6 +104,13 @@ export default async function AdminPage() {
       .eq("dorm_id", dormId)
       .eq("status", "pending")
       .order("submitted_at", { ascending: true })
+      .limit(3),
+    supabase
+      .from("maintenance_requests")
+      .select("id, title, room_id, created_at")
+      .eq("dorm_id", dormId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
       .limit(3),
   ]);
 
@@ -171,7 +187,10 @@ export default async function AdminPage() {
     return {
       start,
       end,
-      label: start.toLocaleDateString("en-PH", { month: "short", year: "2-digit" }),
+      label: start.toLocaleDateString("en-PH", {
+        month: "short",
+        year: "2-digit",
+      }),
     };
   });
 
@@ -228,16 +247,19 @@ export default async function AdminPage() {
     .filter((b) => b.displayStatus === "overdue")
     .map((b) => {
       const daysOverdue = Math.floor(
-        (now.getTime() - new Date(b.due_date + "T00:00:00").getTime()) / 86_400_000
+        (now.getTime() - new Date(b.due_date + "T00:00:00").getTime()) /
+          86_400_000
       );
       return {
         key: `bill-${b.id}`,
         icon: AlertTriangle,
         iconClass: "text-status-overdue",
-        title: `Room ${b.room_id ? roomNumberById.get(b.room_id) ?? "—" : "—"} · ${formatMoney(
-          Number(b.total_amount) - Number(b.amount_paid)
-        )}`,
-        detail: `${tenantNameById.get(b.tenant_id) ?? "Unknown tenant"} · ${daysOverdue}d overdue`,
+        title: `Room ${
+          b.room_id ? roomNumberById.get(b.room_id) ?? "—" : "—"
+        } · ${formatMoney(Number(b.total_amount) - Number(b.amount_paid))}`,
+        detail: `${
+          tenantNameById.get(b.tenant_id) ?? "Unknown tenant"
+        } · ${daysOverdue}d overdue`,
         href: "/admin/billing",
       };
     })
@@ -265,10 +287,25 @@ export default async function AdminPage() {
       href: "/admin/rooms",
     }));
 
+  // alongside maintenanceItems, using the room-number lookup already built above
+  const maintenanceRequestItems = (pendingMaintenanceRequests ?? []).map(
+    (r) => ({
+      key: `maint-request-${r.id}`,
+      icon: ClipboardList,
+      iconClass: "text-status-partial",
+      title: r.title,
+      detail: r.room_id
+        ? `Room ${roomNumberById.get(r.room_id) ?? "—"} · needs review`
+        : "Needs review",
+      href: "/admin/maintenance",
+    })
+  );
+
   const attentionItems = [
     ...overdueItems,
     ...applicationItems,
     ...maintenanceItems,
+    ...maintenanceRequestItems,
   ].slice(0, 5);
 
   const ownerFirstName =
@@ -311,9 +348,7 @@ export default async function AdminPage() {
             {activeTenants.length}
           </p>
           <p className="text-[11px] text-foreground-muted">
-            {newActiveThisMonth > 0
-              ? `+${newActiveThisMonth} this month`
-              : " "}
+            {newActiveThisMonth > 0 ? `+${newActiveThisMonth} this month` : " "}
           </p>
         </div>
 
@@ -437,7 +472,9 @@ export default async function AdminPage() {
                         : ""
                     }`}
                   >
-                    <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${item.iconClass}`} />
+                    <Icon
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${item.iconClass}`}
+                    />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
                         {item.title}

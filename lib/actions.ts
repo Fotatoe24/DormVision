@@ -221,7 +221,9 @@ export async function resetPassword(formData: FormData) {
     .eq("id", user.id);
 
   if (updateError) {
-    redirect("/reset-password?error=" + encodeURIComponent(updateError.message));
+    redirect(
+      "/reset-password?error=" + encodeURIComponent(updateError.message)
+    );
   }
 
   const sessionToken = await createSessionToken({
@@ -272,7 +274,8 @@ export async function signUpOwner(formData: FormData) {
 
   if (existing) {
     redirect(
-      "/signup?error=" + encodeURIComponent("An account with that email already exists.")
+      "/signup?error=" +
+        encodeURIComponent("An account with that email already exists.")
     );
   }
 
@@ -492,8 +495,7 @@ export async function approveRegistrationRequest(formData: FormData) {
 
   if (requestError || !request) {
     redirect(
-      "/admin/tenant-requests?error=" +
-        encodeURIComponent("Request not found.")
+      "/admin/tenant-requests?error=" + encodeURIComponent("Request not found.")
     );
   }
 
@@ -590,13 +592,17 @@ export async function rejectRegistrationRequest(formData: FormData) {
     .select("id, full_name");
 
   if (error) {
-    redirect("/admin/tenant-requests?error=" + encodeURIComponent(error.message));
+    redirect(
+      "/admin/tenant-requests?error=" + encodeURIComponent(error.message)
+    );
   }
 
   if (!data || data.length === 0) {
     redirect(
       "/admin/tenant-requests?error=" +
-        encodeURIComponent("Request not found, access denied, or already reviewed.")
+        encodeURIComponent(
+          "Request not found, access denied, or already reviewed."
+        )
     );
   }
 
@@ -711,7 +717,9 @@ export async function submitRegistrationRequest(formData: FormData) {
   if (existingPending) {
     redirect(
       "/tenant?error=" +
-        encodeURIComponent("You already have a pending request for that dormitory.")
+        encodeURIComponent(
+          "You already have a pending request for that dormitory."
+        )
     );
   }
 
@@ -746,7 +754,9 @@ export async function submitRegistrationRequest(formData: FormData) {
   if (insertError) {
     redirect(
       "/tenant?error=" +
-        encodeURIComponent("Could not submit your request: " + insertError.message)
+        encodeURIComponent(
+          "Could not submit your request: " + insertError.message
+        )
     );
   }
 
@@ -2103,7 +2113,9 @@ export async function rejectPendingPayment(formData: FormData) {
     .eq("id", payment.id);
 
   if (updateError) {
-    redirect("/admin/payments?error=" + encodeURIComponent(updateError.message));
+    redirect(
+      "/admin/payments?error=" + encodeURIComponent(updateError.message)
+    );
   }
 
   revalidatePath("/admin/payments");
@@ -2207,7 +2219,9 @@ export async function createTransaction(formData: FormData) {
       category as (typeof TRANSACTION_CATEGORIES)[number]
     )
   ) {
-    redirect("/admin/expenses?error=" + encodeURIComponent("Invalid category."));
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Invalid category.")
+    );
   }
 
   // Rent income is already fully captured via Billing/Payments --
@@ -2284,4 +2298,129 @@ export async function deleteTransaction(formData: FormData) {
   revalidatePath("/admin/expenses");
 
   redirect("/admin/expenses?saved=1");
+}
+// ============================================================
+// MAINTENANCE REQUESTS
+// ============================================================
+
+async function requireTenantRecord() {
+  const session = await getSessionUser();
+
+  if (!session) {
+    redirect("/");
+  }
+
+  const admin = createAdminClient();
+
+  const { data: tenant } = await admin
+    .from("tenants")
+    .select("id, dorm_id, room_id")
+    .eq("profile_id", session.user.id)
+    .maybeSingle();
+
+  if (!tenant) {
+    redirect("/tenant");
+  }
+
+  return tenant;
+}
+
+export async function submitMaintenanceRequest(formData: FormData) {
+  const tenant = await requireTenantRecord();
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+
+  if (!title) {
+    redirect(
+      "/tenant/maintenance?error=" +
+        encodeURIComponent("Enter a short title for your request.")
+    );
+  }
+
+  const admin = createAdminClient();
+
+  const { data: settings } = await admin
+    .from("dorm_settings")
+    .select("allow_maintenance_requests")
+    .eq("dorm_id", tenant.dorm_id)
+    .maybeSingle();
+
+  if (settings && settings.allow_maintenance_requests === false) {
+    redirect(
+      "/tenant/maintenance?error=" +
+        encodeURIComponent(
+          "Maintenance requests are currently disabled for your dorm."
+        )
+    );
+  }
+
+  const { error } = await admin.from("maintenance_requests").insert({
+    tenant_id: tenant.id,
+    room_id: tenant.room_id,
+    dorm_id: tenant.dorm_id,
+    title,
+    description: description || null,
+  });
+
+  if (error) {
+    redirect("/tenant/maintenance?error=" + encodeURIComponent(error.message));
+  }
+
+  revalidatePath("/tenant/maintenance");
+  redirect(
+    "/tenant/maintenance?saved=" + encodeURIComponent("Request submitted.")
+  );
+}
+
+export async function updateMaintenanceRequestStatus(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const requestId = String(formData.get("requestId") ?? "");
+  const status = String(formData.get("status") ?? "");
+
+  const allowed = [
+    "pending",
+    "acknowledged",
+    "in_progress",
+    "completed",
+    "rejected",
+  ];
+
+  if (!requestId || !allowed.includes(status)) {
+    redirect(
+      "/admin/maintenance?error=" + encodeURIComponent("Invalid update.")
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  const patch: Record<string, unknown> = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+  if (status === "acknowledged")
+    patch.acknowledged_at = new Date().toISOString();
+  if (status === "completed") patch.completed_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("maintenance_requests")
+    .update(patch)
+    .eq("id", requestId)
+    .eq("dorm_id", dormId)
+    .select("id");
+
+  if (error) {
+    redirect("/admin/maintenance?error=" + encodeURIComponent(error.message));
+  }
+
+  if (!data || data.length === 0) {
+    redirect(
+      "/admin/maintenance?error=" +
+        encodeURIComponent("Request not found or access denied.")
+    );
+  }
+
+  revalidatePath("/admin/maintenance");
+  redirect("/admin/maintenance");
 }
