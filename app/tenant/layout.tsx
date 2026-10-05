@@ -21,10 +21,12 @@ export default async function TenantLayout({
     getMyPendingMaintenanceRequestsCount(session.user.id),
   ]);
 
-  <TenantShell
-    dormName={dormName}
-    pendingMaintenanceCount={pendingMaintenanceCount}
-  >
-    {children}
-  </TenantShell>;
+  return (
+    <TenantShell
+      dormName={dormName}
+      pendingMaintenanceCount={pendingMaintenanceCount}
+    >
+      {children}
+    </TenantShell>
+  );
 }
