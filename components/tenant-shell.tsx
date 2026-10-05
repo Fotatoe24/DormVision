@@ -38,7 +38,9 @@ function SignOutButton({ className }: { className?: string }) {
       <button
         type="submit"
         aria-label="Sign out"
-        className={`flex items-center gap-2 rounded-md text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing} ${className ?? ""}`}
+        className={`flex items-center gap-2 rounded-md text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing} ${
+          className ?? ""
+        }`}
       >
         <LogOut className="h-4 w-4" />
         <span className="text-sm">Sign out</span>
@@ -53,9 +55,11 @@ function SignOutButton({ className }: { className?: string }) {
 // safe-area-aware pattern for consistency.
 export function TenantShell({
   dormName,
+  pendingMaintenanceCount = 0,
   children,
 }: {
   dormName?: string;
+  pendingMaintenanceCount?: number;
   children: React.ReactNode;
 }) {
   const sidebarFooter = (
@@ -79,6 +83,7 @@ export function TenantShell({
       <AppSidebar
         subtitle={dormName}
         groups={tenantNavigation.desktopGroups}
+        badgeCounts={{ myPendingMaintenance: pendingMaintenanceCount }}
         footer={sidebarFooter}
       />
 
@@ -110,6 +115,7 @@ export function TenantShell({
         items={tenantNavigation.primary}
         hasMore={false}
         moreActive={false}
+        badgeCounts={{ myPendingMaintenance: pendingMaintenanceCount }}
         onMoreClick={() => {}}
       />
     </div>

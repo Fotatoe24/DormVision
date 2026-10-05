@@ -48,7 +48,10 @@ export function AppSidebar({
   subtitle?: string;
   groups: NavGroup[];
   badgeCounts?: Partial<
-    Record<"pendingRequests" | "pendingMaintenance", number>
+    Record<
+      "pendingRequests" | "pendingMaintenance" | "myPendingMaintenance",
+      number
+    >
   >;
   footer: React.ReactNode;
 }) {

@@ -29,7 +29,7 @@ export type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
-  badge?: "pendingRequests" | "pendingMaintenance";
+  badge?: "pendingRequests" | "pendingMaintenance" | "myPendingMaintenance";
 };
 
 export type NavGroup = {
@@ -80,6 +80,15 @@ const tenantRequests: NavItem = {
   icon: UserPlus,
   badge: "pendingRequests",
 };
+
+const tenantMaintenance: NavItem = {
+  key: "maintenance",
+  label: "Maintenance",
+  href: "/tenant/maintenance",
+  icon: Wrench,
+  badge: "myPendingMaintenance",
+};
+
 const billing: NavItem = {
   key: "billing",
   label: "Billing",

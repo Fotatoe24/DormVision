@@ -19,12 +19,19 @@ export function BottomNav({
   hasMore,
   moreActive,
   moreBadge = false,
+  badgeCounts = {},
   onMoreClick,
 }: {
   items: NavItem[];
   hasMore: boolean;
   moreActive: boolean;
   moreBadge?: boolean;
+  badgeCounts?: Partial<
+    Record<
+      "pendingRequests" | "pendingMaintenance" | "myPendingMaintenance",
+      number
+    >
+  >;
   onMoreClick: () => void;
 }) {
   const pathname = usePathname();
@@ -36,10 +43,14 @@ export function BottomNav({
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface sm:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${slotCount}, minmax(0, 1fr))` }}>
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${slotCount}, minmax(0, 1fr))` }}
+      >
         {items.map((item) => {
           const active = isItemActive(pathname, item.href);
           const Icon = item.icon;
+          const badgeCount = item.badge ? badgeCounts[item.badge] ?? 0 : 0;
           return (
             <Link
               key={item.key}
@@ -49,12 +60,19 @@ export function BottomNav({
                 active ? "text-primary" : "text-foreground-muted"
               }`}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+              <span className="relative">
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+                {badgeCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-status-overdue"
+                  />
+                )}
+              </span>
               <span className={active ? "font-medium" : ""}>{item.label}</span>
             </Link>
           );
         })}
-
         {hasMore && (
           <button
             type="button"
@@ -66,7 +84,10 @@ export function BottomNav({
             }`}
           >
             <span className="relative">
-              <MoreHorizontal className="h-5 w-5" strokeWidth={moreActive ? 2.5 : 2} />
+              <MoreHorizontal
+                className="h-5 w-5"
+                strokeWidth={moreActive ? 2.5 : 2}
+              />
               {moreBadge && (
                 <span
                   aria-hidden="true"

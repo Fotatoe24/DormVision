@@ -46,3 +46,27 @@ export async function getPendingMaintenanceRequestsCount(
 
   return count ?? 0;
 }
+
+export async function getMyPendingMaintenanceRequestsCount(
+  userId: string | null | undefined
+) {
+  if (!userId) return 0;
+
+  const supabase = createAdminClient();
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("profile_id", userId)
+    .maybeSingle();
+
+  if (!tenant) return 0;
+
+  const { count } = await supabase
+    .from("maintenance_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenant.id)
+    .eq("status", "pending");
+
+  return count ?? 0;
+}

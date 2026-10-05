@@ -153,6 +153,10 @@ export function AdminShell({
   const moreActive = secondaryItems.some((item) =>
     pathname.startsWith(item.href)
   );
+  const badgeCounts = {
+    pendingRequests: pendingRequestsCount,
+    pendingMaintenance: pendingMaintenanceCount,
+  };
 
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
@@ -222,7 +226,8 @@ export function AdminShell({
         items={adminNavigation.primary}
         hasMore={secondaryItems.length > 0}
         moreActive={moreActive}
-        moreBadge={pendingRequestsCount > 0}
+        moreBadge={pendingRequestsCount > 0 || pendingMaintenanceCount > 0}
+        badgeCounts={badgeCounts}
         onMoreClick={() => setMoreOpen(true)}
       />
 
