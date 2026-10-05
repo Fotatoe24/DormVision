@@ -125,7 +125,7 @@ export const adminNavigation: NavConfig = {
   secondaryGroups: [
     {
       label: "Management",
-      items: [tenantRequests, payments, expenses, monitoring],
+      items: [tenantRequests, maintenance, payments, expenses, monitoring],
     },
     { label: "System", items: [adminSettings] },
   ],
@@ -137,6 +137,7 @@ export const adminNavigation: NavConfig = {
         rooms,
         tenants,
         tenantRequests,
+        maintenance,
         billing,
         payments,
         expenses,
@@ -166,9 +167,9 @@ const tenantProfile: NavItem = {
 };
 
 export const tenantNavigation: NavConfig = {
-  primary: [tenantHome, tenantProfile],
+  primary: [tenantHome, tenantMaintenance, tenantProfile],
   secondaryGroups: [],
-  desktopGroups: [{ items: [tenantHome, tenantProfile] }],
+  desktopGroups: [{ items: [tenantHome, tenantMaintenance, tenantProfile] }],
 };
 
 export function allSecondaryItems(config: NavConfig): NavItem[] {
