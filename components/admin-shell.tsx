@@ -125,11 +125,13 @@ export function AdminShell({
   dormName,
   ownerName,
   pendingRequestsCount = 0,
+  pendingMaintenanceCount = 0,
   children,
 }: {
   dormName?: string;
   ownerName?: string;
   pendingRequestsCount?: number;
+  pendingMaintenanceCount?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -178,7 +180,10 @@ export function AdminShell({
       <AppSidebar
         subtitle={dormName}
         groups={adminNavigation.desktopGroups}
-        pendingBadgeCount={pendingRequestsCount}
+        badgeCounts={{
+          pendingRequests: pendingRequestsCount,
+          pendingMaintenance: 0, // You would populate this with the actual count if available
+        }}
         footer={sidebarFooter}
       />
 

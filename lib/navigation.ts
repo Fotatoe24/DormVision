@@ -11,6 +11,7 @@ import {
   Home,
   User,
   type LucideIcon,
+  Wrench,
 } from "lucide-react";
 
 // Single source of truth for the app's navigation — consumed by the
@@ -28,7 +29,7 @@ export type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
-  badge?: "pendingRequests";
+  badge?: "pendingRequests" | "pendingMaintenance";
 };
 
 export type NavGroup = {
@@ -45,9 +46,33 @@ export type NavConfig = {
   desktopGroups: NavGroup[];
 };
 
-const dashboard: NavItem = { key: "dashboard", label: "Dashboard", href: "/admin", icon: LayoutDashboard };
-const rooms: NavItem = { key: "rooms", label: "Rooms", href: "/admin/rooms", icon: BedDouble };
-const tenants: NavItem = { key: "tenants", label: "Tenants", href: "/admin/tenants", icon: Users };
+const dashboard: NavItem = {
+  key: "dashboard",
+  label: "Dashboard",
+  href: "/admin",
+  icon: LayoutDashboard,
+};
+
+const maintenance: NavItem = {
+  key: "maintenance",
+  label: "Maintenance",
+  href: "/admin/maintenance",
+  icon: Wrench,
+  badge: "pendingMaintenance",
+};
+
+const rooms: NavItem = {
+  key: "rooms",
+  label: "Rooms",
+  href: "/admin/rooms",
+  icon: BedDouble,
+};
+const tenants: NavItem = {
+  key: "tenants",
+  label: "Tenants",
+  href: "/admin/tenants",
+  icon: Users,
+};
 const tenantRequests: NavItem = {
   key: "tenant-requests",
   label: "Tenant Requests",
@@ -55,22 +80,59 @@ const tenantRequests: NavItem = {
   icon: UserPlus,
   badge: "pendingRequests",
 };
-const billing: NavItem = { key: "billing", label: "Billing", href: "/admin/billing", icon: Receipt };
-const payments: NavItem = { key: "payments", label: "Payments", href: "/admin/payments", icon: Banknote };
-const expenses: NavItem = { key: "expenses", label: "Expenses", href: "/admin/expenses", icon: Coins };
-const monitoring: NavItem = { key: "monitoring", label: "Monitoring", href: "/admin/monitoring", icon: BarChart3 };
-const adminSettings: NavItem = { key: "settings", label: "Settings", href: "/admin/settings", icon: Settings };
+const billing: NavItem = {
+  key: "billing",
+  label: "Billing",
+  href: "/admin/billing",
+  icon: Receipt,
+};
+const payments: NavItem = {
+  key: "payments",
+  label: "Payments",
+  href: "/admin/payments",
+  icon: Banknote,
+};
+const expenses: NavItem = {
+  key: "expenses",
+  label: "Expenses",
+  href: "/admin/expenses",
+  icon: Coins,
+};
+const monitoring: NavItem = {
+  key: "monitoring",
+  label: "Monitoring",
+  href: "/admin/monitoring",
+  icon: BarChart3,
+};
+const adminSettings: NavItem = {
+  key: "settings",
+  label: "Settings",
+  href: "/admin/settings",
+  icon: Settings,
+};
 
 export const adminNavigation: NavConfig = {
   primary: [dashboard, rooms, tenants, billing],
   secondaryGroups: [
-    { label: "Management", items: [tenantRequests, payments, expenses, monitoring] },
+    {
+      label: "Management",
+      items: [tenantRequests, payments, expenses, monitoring],
+    },
     { label: "System", items: [adminSettings] },
   ],
   desktopGroups: [
     {
       label: "Main",
-      items: [dashboard, rooms, tenants, tenantRequests, billing, payments, expenses, monitoring],
+      items: [
+        dashboard,
+        rooms,
+        tenants,
+        tenantRequests,
+        billing,
+        payments,
+        expenses,
+        monitoring,
+      ],
     },
     { label: "System", items: [adminSettings] },
   ],
@@ -81,8 +143,18 @@ export const adminNavigation: NavConfig = {
 // "Payments", "Requests", or "Notifications" route to link to, so the
 // tenant nav stays honestly small rather than padded out with items
 // that go nowhere new.
-const tenantHome: NavItem = { key: "home", label: "Home", href: "/tenant", icon: Home };
-const tenantProfile: NavItem = { key: "profile", label: "Profile", href: "/profile", icon: User };
+const tenantHome: NavItem = {
+  key: "home",
+  label: "Home",
+  href: "/tenant",
+  icon: Home,
+};
+const tenantProfile: NavItem = {
+  key: "profile",
+  label: "Profile",
+  href: "/profile",
+  icon: User,
+};
 
 export const tenantNavigation: NavConfig = {
   primary: [tenantHome, tenantProfile],

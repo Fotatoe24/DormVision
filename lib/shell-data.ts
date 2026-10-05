@@ -17,12 +17,29 @@ export async function getDormName(dormId: string | null | undefined) {
   return data?.name ?? undefined;
 }
 
-export async function getPendingRequestsCount(dormId: string | null | undefined) {
+export async function getPendingRequestsCount(
+  dormId: string | null | undefined
+) {
   if (!dormId) return 0;
 
   const supabase = createAdminClient();
   const { count } = await supabase
     .from("tenant_registration_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("dorm_id", dormId)
+    .eq("status", "pending");
+
+  return count ?? 0;
+}
+
+export async function getPendingMaintenanceRequestsCount(
+  dormId: string | null | undefined
+) {
+  if (!dormId) return 0;
+
+  const supabase = createAdminClient();
+  const { count } = await supabase
+    .from("maintenance_requests")
     .select("id", { count: "exact", head: true })
     .eq("dorm_id", dormId)
     .eq("status", "pending");

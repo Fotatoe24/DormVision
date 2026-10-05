@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { AdminShell } from "@/components/admin-shell";
-import { getDormName, getPendingRequestsCount } from "@/lib/shell-data";
+import {
+  getDormName,
+  getPendingRequestsCount,
+  getPendingMaintenanceRequestsCount,
+} from "@/lib/shell-data";
 
 export default async function AdminLayout({
   children,
@@ -15,16 +19,19 @@ export default async function AdminLayout({
   if (!session) redirect("/");
   if (session.profile?.role !== "owner") redirect("/tenant");
 
-  const [dormName, pendingRequestsCount] = await Promise.all([
-    getDormName(session.profile.dorm_id),
-    getPendingRequestsCount(session.profile.dorm_id),
-  ]);
+  const [dormName, pendingRequestsCount, pendingMaintenanceCount] =
+    await Promise.all([
+      getDormName(session.profile.dorm_id),
+      getPendingRequestsCount(session.profile.dorm_id),
+      getPendingMaintenanceRequestsCount(session.profile.dorm_id),
+    ]);
 
   return (
     <AdminShell
       dormName={dormName}
       ownerName={session.profile.full_name}
       pendingRequestsCount={pendingRequestsCount}
+      pendingMaintenanceCount={pendingMaintenanceCount}
     >
       {children}
       {modal}

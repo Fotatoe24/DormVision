@@ -42,12 +42,14 @@ function BrandMark() {
 export function AppSidebar({
   subtitle,
   groups,
-  pendingBadgeCount = 0,
+  badgeCounts = {},
   footer,
 }: {
   subtitle?: string;
   groups: NavGroup[];
-  pendingBadgeCount?: number;
+  badgeCounts?: Partial<
+    Record<"pendingRequests" | "pendingMaintenance", number>
+  >;
   footer: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -82,8 +84,9 @@ export function AppSidebar({
               {group.items.map((item) => {
                 const active = isItemActive(pathname, item.href);
                 const Icon = item.icon;
-                const badgeCount =
-                  item.badge === "pendingRequests" ? pendingBadgeCount : 0;
+                const badgeCount = item.badge
+                  ? badgeCounts[item.badge] ?? 0
+                  : 0;
 
                 return (
                   <li key={item.key}>
