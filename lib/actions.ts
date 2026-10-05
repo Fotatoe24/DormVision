@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/mailer";
+import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 
 // ============================================================
 // AUTHENTICATION
@@ -2340,13 +2341,9 @@ export async function submitMaintenanceRequest(formData: FormData) {
 
   const admin = createAdminClient();
 
-  const { data: settings } = await admin
-    .from("dorm_settings")
-    .select("allow_maintenance_requests")
-    .eq("dorm_id", tenant.dorm_id)
-    .maybeSingle();
+  const { allowRequests } = await getMaintenanceSettings(tenant.dorm_id);
 
-  if (settings && settings.allow_maintenance_requests === false) {
+  if (!allowRequests) {
     redirect(
       "/tenant/maintenance?error=" +
         encodeURIComponent(
@@ -2394,6 +2391,28 @@ export async function updateMaintenanceRequestStatus(formData: FormData) {
   }
 
   const supabase = createAdminClient();
+
+  // "Require maintenance approval" toggle: when on, a pending request
+  // must be acknowledged (or rejected) before work can start or finish.
+  const { requireApproval } = await getMaintenanceSettings(dormId);
+
+  if (requireApproval && (status === "in_progress" || status === "completed")) {
+    const { data: current } = await supabase
+      .from("maintenance_requests")
+      .select("status")
+      .eq("id", requestId)
+      .eq("dorm_id", dormId)
+      .maybeSingle();
+
+    if (current?.status === "pending") {
+      redirect(
+        "/admin/maintenance?error=" +
+          encodeURIComponent(
+            "Approve (acknowledge) this request before starting work."
+          )
+      );
+    }
+  }
 
   const patch: Record<string, unknown> = {
     status,

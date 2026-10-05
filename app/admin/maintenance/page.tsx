@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateMaintenanceRequestStatus } from "@/lib/actions";
+import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 
 const statusStyles: Record<string, string> = {
   pending: "bg-status-partial/15 text-status-partial",
@@ -52,6 +53,21 @@ export default async function MaintenancePage({
   if (!dormId) redirect("/");
 
   const supabase = createAdminClient();
+  const { requireApproval, allowRequests } = await getMaintenanceSettings(
+    dormId
+  );
+
+  // With approval required, pending requests can only be acknowledged or
+  // rejected. Without it, the owner can act on a pending request directly.
+  const actionsFor = (status: string) =>
+    status === "pending" && !requireApproval
+      ? [
+          { label: "Acknowledge", status: "acknowledged" },
+          { label: "Start work", status: "in_progress" },
+          { label: "Mark done", status: "completed" },
+          { label: "Reject", status: "rejected" },
+        ]
+      : nextActions[status] ?? [];
 
   const { data: requests } = await supabase
     .from("maintenance_requests")
@@ -72,6 +88,12 @@ export default async function MaintenancePage({
         <p className="text-xs text-foreground-muted">
           Tenant-reported issues for your dormitory.
         </p>
+        {!allowRequests && (
+          <p className="mt-2 text-xs text-status-partial">
+            Tenant requests are turned off in Settings. Existing requests are
+            still listed below.
+          </p>
+        )}
       </div>
 
       {error && (
@@ -131,9 +153,9 @@ export default async function MaintenancePage({
                 </p>
               )}
 
-              {nextActions[r.status]?.length > 0 && (
-                <div className="flex items-center gap-2">
-                  {nextActions[r.status].map((action) => (
+              {actionsFor(r.status).length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {actionsFor(r.status).map((action) => (
                     <form
                       action={updateMaintenanceRequestStatus}
                       key={action.status}

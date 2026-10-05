@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { submitMaintenanceRequest } from "@/lib/actions";
+import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -38,9 +39,11 @@ export default async function TenantMaintenancePage({
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id")
+    .select("id, dorm_id")
     .eq("profile_id", session.user.id)
     .maybeSingle();
+
+  const { allowRequests } = await getMaintenanceSettings(tenant?.dorm_id);
 
   const { data: requests } = tenant
     ? await supabase
@@ -74,45 +77,52 @@ export default async function TenantMaintenancePage({
         </div>
       )}
 
-      <form
-        action={submitMaintenanceRequest}
-        className="mb-6 rounded-lg border border-border bg-surface p-6"
-      >
-        <p className="mb-4 font-heading text-sm font-semibold">
-          Submit a request
-        </p>
-        <div className="mb-4">
-          <label htmlFor="title" className={labelClass}>
-            What&apos;s wrong?
-          </label>
-          <input
-            id="title"
-            name="title"
-            type="text"
-            required
-            placeholder="Leaking faucet"
-            className={inputClass}
-          />
-        </div>
-        <div className="mb-4">
-          <label htmlFor="description" className={labelClass}>
-            Details (optional)
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            rows={3}
-            placeholder="Bathroom sink drips constantly, worse at night."
-            className={inputClass}
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
+      {allowRequests ? (
+        <form
+          action={submitMaintenanceRequest}
+          className="mb-6 rounded-lg border border-border bg-surface p-6"
         >
-          Submit request
-        </button>
-      </form>
+          <p className="mb-4 font-heading text-sm font-semibold">
+            Submit a request
+          </p>
+          <div className="mb-4">
+            <label htmlFor="title" className={labelClass}>
+              What&apos;s wrong?
+            </label>
+            <input
+              id="title"
+              name="title"
+              type="text"
+              required
+              placeholder="Leaking faucet"
+              className={inputClass}
+            />
+          </div>
+          <div className="mb-4">
+            <label htmlFor="description" className={labelClass}>
+              Details (optional)
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows={3}
+              placeholder="Bathroom sink drips constantly, worse at night."
+              className={inputClass}
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
+          >
+            Submit request
+          </button>
+        </form>
+      ) : (
+        <div className="mb-6 rounded-lg border border-border bg-surface p-6 text-sm text-foreground-muted">
+          Your dorm owner isn&apos;t accepting new maintenance requests right
+          now. Your earlier requests are still listed below.
+        </div>
+      )}
 
       <div className="space-y-3">
         {requestRows.length === 0 && (

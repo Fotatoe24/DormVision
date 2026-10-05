@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 
 // Shared by every layout that wraps a page in AdminShell/TenantShell
 // (app/admin/layout.tsx, app/tenant/layout.tsx, app/profile/layout.tsx)
@@ -36,6 +37,11 @@ export async function getPendingMaintenanceRequestsCount(
   dormId: string | null | undefined
 ) {
   if (!dormId) return 0;
+
+  // "Maintenance notifications" toggle: when off, the owner gets no
+  // pending-request badge in the nav.
+  const { notifyOwner } = await getMaintenanceSettings(dormId);
+  if (!notifyOwner) return 0;
 
   const supabase = createAdminClient();
   const { count } = await supabase
