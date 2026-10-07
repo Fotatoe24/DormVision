@@ -2300,6 +2300,84 @@ export async function deleteTransaction(formData: FormData) {
 
   redirect("/admin/expenses?saved=1");
 }
+
+export async function updateTransaction(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const transactionId = String(formData.get("transactionId") ?? "");
+  const type = String(formData.get("type") ?? "");
+  const category = String(formData.get("category") ?? "");
+  const amount = Number(formData.get("amount"));
+  const description = String(formData.get("description") ?? "").trim();
+  const occurredAt = String(formData.get("occurredAt") ?? "").trim();
+
+  if (!transactionId) {
+    redirect("/admin/expenses?error=" + encodeURIComponent("Missing transaction."));
+  }
+
+  if (!TRANSACTION_TYPES.includes(type as (typeof TRANSACTION_TYPES)[number])) {
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Invalid transaction type.")
+    );
+  }
+
+  if (
+    !TRANSACTION_CATEGORIES.includes(
+      category as (typeof TRANSACTION_CATEGORIES)[number]
+    )
+  ) {
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Invalid category.")
+    );
+  }
+
+  // Same double-counting guard as createTransaction -- rent income
+  // only ever comes from Billing/Payments.
+  if (type === "income" && category === "rent") {
+    redirect(
+      "/admin/expenses?error=" +
+        encodeURIComponent(
+          "Rent income is tracked through Billing, not here. Record the payment on the Billing page instead."
+        )
+    );
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Enter a valid amount.")
+    );
+  }
+
+  if (!occurredAt) {
+    redirect("/admin/expenses?error=" + encodeURIComponent("Pick a date."));
+  }
+
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("transactions")
+    .update({
+      type,
+      category,
+      amount,
+      description: description || null,
+      occurred_at: occurredAt,
+    })
+    .eq("id", transactionId)
+    .eq("dorm_id", dormId);
+
+  if (error) {
+    redirect(
+      "/admin/expenses?error=" +
+        encodeURIComponent("Could not update transaction: " + error.message)
+    );
+  }
+
+  revalidatePath("/admin/expenses");
+
+  redirect("/admin/expenses?saved=1");
+}
+
 // ============================================================
 // MAINTENANCE REQUESTS
 // ============================================================

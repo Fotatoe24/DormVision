@@ -103,7 +103,7 @@ const payments: NavItem = {
 };
 const expenses: NavItem = {
   key: "expenses",
-  label: "Expenses",
+  label: "Income & Expenses",
   href: "/admin/expenses",
   icon: Coins,
 };
