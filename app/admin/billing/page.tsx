@@ -1,33 +1,56 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  generateMonthlyBills,
-  createBill,
-  recordPayment,
-  deleteBill,
-} from "@/lib/actions";
-import {
-  billStatusStyles as statusStyles,
-  formatMoney,
-  formatBillDate as formatDate,
-  displayBillStatus as displayStatus,
-} from "@/lib/billing";
+import { generateMonthlyBills } from "@/lib/actions";
+import { displayBillStatus as displayStatus } from "@/lib/billing";
+import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
+import {
+  RoomBillingModal,
+  type ModalBillRow,
+  type ModalUtilityBill,
+} from "@/components/room-billing-modal";
+import { ChevronRight } from "lucide-react";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
 
-const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
+// How many of a room's most recent bills (rent) / utility bills to
+// load into its modal -- capped rather than unbounded so opening a
+// room with a long tenancy history doesn't pull its entire billing
+// history into one query. Comfortably covers a year of monthly
+// billing without paginating inside the modal itself.
+const HISTORY_CAP = 8;
+
+type StatusFilter = "all" | "outstanding" | "paid";
 
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string; page?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    saved?: string;
+    page?: string;
+    q?: string;
+    status?: string;
+    room?: string;
+  }>;
 }) {
-  const { error, saved, page: pageParam } = await searchParams;
+  const {
+    error,
+    saved,
+    page: pageParam,
+    q,
+    status: statusParam,
+    room: openRoomId,
+  } = await searchParams;
   const page = parsePage(pageParam);
+  const statusFilter: StatusFilter = ["outstanding", "paid"].includes(
+    statusParam ?? ""
+  )
+    ? (statusParam as StatusFilter)
+    : "all";
 
   const session = await getSessionUser();
 
@@ -46,72 +69,55 @@ export default async function BillingPage({
   const supabase = createAdminClient();
 
   // ============================================================
-  // LOAD BILLS
-  // ============================================================
-
-  const { from: billsFrom, to: billsTo } = getRange(page);
-
-  const { data: bills, count: billsCount, error: billsError } = await supabase
-    .from("bills")
-    .select(
-      "id, tenant_id, room_id, billing_period_start, billing_period_end, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status",
-      { count: "exact" }
-    )
-    .eq("dorm_id", dormId)
-    .order("due_date", { ascending: false })
-    .range(billsFrom, billsTo);
-
-  const totalPages = getTotalPages(billsCount ?? 0);
-
-  // Unpaginated, status-only -- "N bill(s) still outstanding" has to
-  // describe every bill for the dorm, not just the current page.
-  const { data: allBillStatuses } = await supabase
-    .from("bills")
-    .select("due_date, status, total_amount, amount_paid")
-    .eq("dorm_id", dormId);
-
-  if (billsError) {
-    console.error("BILLS LOAD ERROR:", billsError);
-  }
-
-  // ============================================================
-  // LOAD TENANTS
+  // LOAD ROOMS, TENANTS, BILLS, UTILITY BILLS
   //
-  // IMPORTANT:
-  // Billing uses tenants.id, NOT users.id.
+  // Billing groups everything by room, so unlike the old flat list
+  // this fetches full dorm-scoped tables (small-dorm scale, same
+  // assumption app/admin/expenses already makes) and groups/filters/
+  // paginates in memory -- grouping by room isn't expressible as a
+  // single paginated query without a lot of extra SQL for what's
+  // still a small dataset.
   // ============================================================
 
-  const { data: tenants, error: tenantsError } = await supabase
-    .from("tenants")
-    .select(
-      `
-      id,
-      profile_id,
-      full_name,
-      room_id,
-      dorm_id,
-      status
-    `
-    )
-    .eq("dorm_id", dormId)
-    .order("full_name");
-
-  // ============================================================
-  // LOAD ROOMS
-  // ============================================================
-
-  const { data: rooms, error: roomsError } = await supabase
-    .from("rooms")
-    .select("id, room_number, monthly_rate")
-    .eq("dorm_id", dormId)
-    .order("room_number");
-
-  // ============================================================
-  // ERROR HANDLING
-  // ============================================================
+  const [
+    { data: rooms, error: roomsError },
+    { data: tenants, error: tenantsError },
+    { data: bills, error: billsError },
+    { data: utilityBills, error: utilityBillsError },
+  ] = await Promise.all([
+    supabase
+      .from("rooms")
+      .select("id, room_number, capacity, monthly_rate")
+      .eq("dorm_id", dormId)
+      .order("room_number"),
+    supabase
+      .from("tenants")
+      .select("id, full_name, room_id, status")
+      .eq("dorm_id", dormId)
+      .eq("status", "active")
+      .order("full_name"),
+    supabase
+      .from("bills")
+      .select(
+        "id, tenant_id, room_id, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status"
+      )
+      .eq("dorm_id", dormId)
+      .order("due_date", { ascending: false }),
+    supabase
+      .from("utility_bills")
+      .select(
+        "id, room_id, due_date, water_amount, electricity_amount, total_amount, amount_paid, status, notes"
+      )
+      .eq("dorm_id", dormId)
+      .order("due_date", { ascending: false }),
+  ]);
 
   const loadError =
-    billsError?.message || tenantsError?.message || roomsError?.message || null;
+    roomsError?.message ||
+    tenantsError?.message ||
+    billsError?.message ||
+    utilityBillsError?.message ||
+    null;
 
   if (loadError) {
     return (
@@ -126,22 +132,110 @@ export default async function BillingPage({
   }
 
   // ============================================================
-  // MAPS
+  // GROUP BY ROOM
   // ============================================================
 
-  const tenantById = new Map(
-    (tenants ?? []).map((tenant) => [tenant.id, tenant])
-  );
+  const tenantsByRoom = new Map<string, typeof tenants>();
+  for (const tenant of tenants ?? []) {
+    if (!tenant.room_id) continue;
+    const list = tenantsByRoom.get(tenant.room_id) ?? [];
+    list.push(tenant);
+    tenantsByRoom.set(tenant.room_id, list);
+  }
 
-  const roomById = new Map((rooms ?? []).map((room) => [room.id, room]));
+  const billsByTenant = new Map<string, ModalBillRow[]>();
+  for (const bill of bills ?? []) {
+    const list = billsByTenant.get(bill.tenant_id) ?? [];
+    list.push(bill);
+    billsByTenant.set(bill.tenant_id, list);
+  }
 
-  // ============================================================
-  // OUTSTANDING COUNT
-  // ============================================================
+  const utilityBillsByRoom = new Map<string, ModalUtilityBill[]>();
+  for (const bill of utilityBills ?? []) {
+    if (!bill.room_id) continue;
+    const list = utilityBillsByRoom.get(bill.room_id) ?? [];
+    list.push(bill);
+    utilityBillsByRoom.set(bill.room_id, list);
+  }
 
-  const outstandingCount = (allBillStatuses ?? []).filter(
-    (bill) => displayStatus(bill) !== "paid"
+  const needle = (q ?? "").trim().toLowerCase();
+
+  const roomSummaries = (rooms ?? []).map((room) => {
+    const roomTenants = tenantsByRoom.get(room.id) ?? [];
+    const roomUtilityBills = utilityBillsByRoom.get(room.id) ?? [];
+
+    const allTenantBills = roomTenants.flatMap(
+      (t) => billsByTenant.get(t.id) ?? []
+    );
+
+    const hasOutstanding =
+      allTenantBills.some((b) => displayStatus(b) !== "paid") ||
+      roomUtilityBills.some((b) => displayStatus(b) !== "paid");
+
+    const outstandingAmount =
+      allTenantBills.reduce(
+        (sum, b) =>
+          displayStatus(b) !== "paid"
+            ? sum + (Number(b.total_amount) - Number(b.amount_paid))
+            : sum,
+        0
+      ) +
+      roomUtilityBills.reduce(
+        (sum, b) =>
+          displayStatus(b) !== "paid"
+            ? sum + (Number(b.total_amount) - Number(b.amount_paid))
+            : sum,
+        0
+      );
+
+    const haystack = [
+      room.room_number,
+      ...roomTenants.map((t) => t.full_name),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return {
+      room,
+      tenants: roomTenants,
+      utilityBills: roomUtilityBills,
+      hasOutstanding,
+      outstandingAmount,
+      haystack,
+    };
+  });
+
+  // "N bill(s) still outstanding" header, across every room regardless
+  // of the current filter/page -- same semantics the old flat list used.
+  const outstandingRoomCount = roomSummaries.filter(
+    (r) => r.hasOutstanding
   ).length;
+
+  const filteredRooms = roomSummaries.filter((r) => {
+    if (needle && !r.haystack.includes(needle)) return false;
+    if (statusFilter === "outstanding" && !r.hasOutstanding) return false;
+    if (statusFilter === "paid" && r.hasOutstanding) return false;
+    return true;
+  });
+
+  const totalPages = getTotalPages(filteredRooms.length);
+  const { from: pageFrom, to: pageTo } = getRange(page);
+  const pageRooms = filteredRooms.slice(pageFrom, pageTo + 1);
+
+  function pageHref(p: number) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (p > 1) params.set("page", String(p));
+    const qs = params.toString();
+    return `/admin/billing${qs ? `?${qs}` : ""}`;
+  }
+
+  const redirectState = {
+    q: q ?? "",
+    status: statusFilter === "all" ? "" : statusFilter,
+    page: String(page),
+  };
 
   return (
     <main className="flex-1 bg-background px-6 py-10 text-foreground">
@@ -156,9 +250,9 @@ export default async function BillingPage({
           </h1>
 
           <p className="text-xs text-foreground-muted">
-            {outstandingCount === 0
-              ? "Every bill is paid up."
-              : `${outstandingCount} bill(s) still outstanding.`}
+            {outstandingRoomCount === 0
+              ? "Every room is paid up."
+              : `${outstandingRoomCount} room(s) with an outstanding balance.`}
           </p>
         </div>
 
@@ -205,293 +299,93 @@ export default async function BillingPage({
         </div>
 
         {/* ======================================================
-            MANUAL BILL
+            FILTERS
         ====================================================== */}
 
-        <details className="mb-6 rounded-lg border border-border bg-surface p-6">
-          <summary className="cursor-pointer font-heading text-sm font-semibold">
-            Add a bill manually
-          </summary>
+        <AutoSubmitForm
+          action="/admin/billing"
+          className="mb-6 flex flex-wrap items-center gap-3"
+        >
+          <input
+            type="text"
+            name="q"
+            defaultValue={q ?? ""}
+            placeholder="Search room or tenant…"
+            className={`${inputClass} max-w-xs`}
+          />
 
-          <form action={createBill} className="mt-4 space-y-4">
-            {/* TENANT */}
-
-            <div>
-              <label htmlFor="tenantId" className={labelClass}>
-                Tenant
-              </label>
-
-              <select
-                id="tenantId"
-                name="tenantId"
-                required
-                className={inputClass}
-              >
-                <option value="">Select a tenant…</option>
-
-                {(tenants ?? []).map((tenant) => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenant.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* DATES */}
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>
-                <label htmlFor="billingPeriodStart" className={labelClass}>
-                  Period start
-                </label>
-
-                <input
-                  id="billingPeriodStart"
-                  name="billingPeriodStart"
-                  type="date"
-                  required
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="billingPeriodEnd" className={labelClass}>
-                  Period end
-                </label>
-
-                <input
-                  id="billingPeriodEnd"
-                  name="billingPeriodEnd"
-                  type="date"
-                  required
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="dueDate" className={labelClass}>
-                  Due date
-                </label>
-
-                <input
-                  id="dueDate"
-                  name="dueDate"
-                  type="date"
-                  required
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            {/* AMOUNTS */}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="rentAmount" className={labelClass}>
-                  Rent amount
-                </label>
-
-                <input
-                  id="rentAmount"
-                  name="rentAmount"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  required
-                  className={`${inputClass} font-mono`}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="otherCharges" className={labelClass}>
-                  Other charges
-                </label>
-
-                <input
-                  id="otherCharges"
-                  name="otherCharges"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="0"
-                  className={`${inputClass} font-mono`}
-                />
-              </div>
-            </div>
-
-            {/* SUBMIT */}
-
-            <button
-              type="submit"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
-            >
-              Add bill
-            </button>
-          </form>
-        </details>
+          <select
+            name="status"
+            defaultValue={statusFilter}
+            className={`${inputClass} w-auto`}
+          >
+            <option value="all">All rooms</option>
+            <option value="outstanding">Outstanding</option>
+            <option value="paid">Paid up</option>
+          </select>
+        </AutoSubmitForm>
 
         {/* ======================================================
-            BILLS LIST
+            ROOMS
         ====================================================== */}
 
         <div className="space-y-3">
-          {(bills ?? []).length === 0 && (
+          {pageRooms.length === 0 && (
             <p className="rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
-              No bills yet — generate this month&apos;s bills above to get
-              started.
+              {roomSummaries.length === 0
+                ? "No rooms yet — add one from the Rooms page to get started."
+                : "No rooms match your filters."}
             </p>
           )}
 
-          {(bills ?? []).map((bill) => {
-            const tenant = tenantById.get(bill.tenant_id);
-
-            const room = bill.room_id ? roomById.get(bill.room_id) : null;
-
-            const status = displayStatus(bill);
-
-            const remaining =
-              Number(bill.total_amount ?? 0) - Number(bill.amount_paid ?? 0);
-
-            return (
-              <div
-                key={bill.id}
-                className="rounded-lg border border-border bg-surface p-5"
-              >
-                {/* HEADER */}
-
-                <div className="mb-3 flex items-start justify-between">
+          {pageRooms.map(({ room, tenants: roomTenants, utilityBills: roomUtilityBills, hasOutstanding, outstandingAmount }) => (
+            <RoomBillingModal
+              key={room.id}
+              roomId={room.id}
+              roomNumber={room.room_number}
+              tenants={roomTenants.map((t) => ({
+                id: t.id,
+                full_name: t.full_name,
+                bills: (billsByTenant.get(t.id) ?? []).slice(0, HISTORY_CAP),
+              }))}
+              utilityBills={roomUtilityBills.slice(0, HISTORY_CAP)}
+              redirectState={redirectState}
+              defaultOpen={openRoomId === room.id}
+              trigger={
+                <div className="flex items-center justify-between rounded-lg border border-border bg-surface p-5 transition-colors hover:border-primary/40">
                   <div>
                     <p className="font-heading text-sm font-semibold">
-                      {tenant?.full_name ?? "Unknown tenant"}
+                      Room {room.room_number}
                     </p>
-
                     <p className="text-xs text-foreground-muted">
-                      {room ? `Room ${room.room_number} · ` : ""}
-                      Due {formatDate(bill.due_date)}
+                      {roomTenants.length > 0
+                        ? roomTenants.map((t) => t.full_name).join(", ")
+                        : "No tenants assigned"}
                     </p>
                   </div>
 
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusStyles[status]}`}
-                  >
-                    {status}
-                  </span>
-                </div>
-
-                {/* AMOUNT DETAILS */}
-
-                <div className="mb-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
-                  <div>
-                    <p className="text-foreground-muted">Rent</p>
-
-                    <p className="font-mono">{formatMoney(bill.rent_amount)}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-foreground-muted">Other charges</p>
-
-                    <p className="font-mono">
-                      {formatMoney(bill.other_charges)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-foreground-muted">Total</p>
-
-                    <p className="font-mono text-accent">
-                      {formatMoney(bill.total_amount)}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    {hasOutstanding ? (
+                      <span className="rounded-full bg-status-overdue/15 px-2.5 py-0.5 text-xs font-medium text-status-overdue">
+                        ₱{outstandingAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} due
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-status-paid/15 px-2.5 py-0.5 text-xs font-medium text-status-paid">
+                        Paid up
+                      </span>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-foreground-muted" />
                   </div>
                 </div>
-
-                {/* PAYMENT */}
-
-                <div className="mb-3 flex items-center justify-between rounded-md bg-surface-muted px-3 py-2 text-xs">
-                  <span>Paid {formatMoney(bill.amount_paid)}</span>
-
-                  <span
-                    className={
-                      remaining > 0 ? "text-status-overdue" : "text-status-paid"
-                    }
-                  >
-                    {remaining > 0
-                      ? `${formatMoney(remaining)} remaining`
-                      : "Fully paid"}
-                  </span>
-                </div>
-
-                {/* ACTIONS */}
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {status !== "paid" && (
-                    <>
-                      {/* Quick full-balance payment — same recordPayment
-                          action as the manual form below, just with the
-                          remaining balance pre-filled as a hidden amount
-                          so the owner doesn't have to type it. */}
-                      <form action={recordPayment}>
-                        <input type="hidden" name="billId" value={bill.id} />
-                        <input
-                          type="hidden"
-                          name="amount"
-                          value={remaining.toFixed(2)}
-                        />
-                        <button
-                          type="submit"
-                          className="rounded-md bg-status-paid px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
-                        >
-                          Mark as Paid — {formatMoney(remaining)}
-                        </button>
-                      </form>
-
-                      <form
-                        action={recordPayment}
-                        className="flex items-center gap-2"
-                      >
-                        <input type="hidden" name="billId" value={bill.id} />
-
-                        <input
-                          type="number"
-                          name="amount"
-                          min={0}
-                          step="0.01"
-                          required
-                          placeholder="Amount"
-                          className="w-28 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
-                        />
-
-                        <button
-                          type="submit"
-                          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-muted hover:text-foreground"
-                        >
-                          Record payment
-                        </button>
-                      </form>
-                    </>
-                  )}
-
-                  {Number(bill.amount_paid) === 0 && (
-                    <form action={deleteBill}>
-                      <input type="hidden" name="billId" value={bill.id} />
-
-                      <button
-                        type="submit"
-                        className="rounded-md border border-status-overdue/30 px-2.5 py-1.5 text-xs text-status-overdue hover:bg-status-overdue/10"
-                      >
-                        Delete
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+              }
+            />
+          ))}
         </div>
 
         <PaginationControls
           page={page}
           totalPages={totalPages}
-          hrefForPage={(p) => (p > 1 ? `/admin/billing?page=${p}` : "/admin/billing")}
+          hrefForPage={pageHref}
         />
       </div>
     </main>

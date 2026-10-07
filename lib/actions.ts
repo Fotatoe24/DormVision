@@ -832,6 +832,40 @@ async function requireOwnerDormId() {
 }
 
 // ============================================================
+// BILLING PAGE REDIRECT HELPER
+//
+// The Billing page groups bills by room behind a per-room modal, with
+// its own search/status filter and pagination (see
+// components/room-billing-modal.tsx). Every mutation inside that
+// modal carries hidden "room"/"q"/"status"/"page" fields mirroring
+// the page's current state, so a redirect after the action can land
+// back on the same filtered/paginated view with that room's modal
+// already open, instead of resetting to page 1 with every modal
+// closed.
+// ============================================================
+
+function billingRedirect(formData: FormData, extra: Record<string, string>) {
+  const params = new URLSearchParams();
+
+  const room = String(formData.get("room") ?? "").trim();
+  const q = String(formData.get("q") ?? "").trim();
+  const status = String(formData.get("status") ?? "").trim();
+  const page = String(formData.get("page") ?? "").trim();
+
+  if (room) params.set("room", room);
+  if (q) params.set("q", q);
+  if (status) params.set("status", status);
+  if (page && page !== "1") params.set("page", page);
+
+  for (const [key, value] of Object.entries(extra)) {
+    params.set(key, value);
+  }
+
+  const qs = params.toString();
+  return `/admin/billing${qs ? `?${qs}` : ""}`;
+}
+
+// ============================================================
 // ROOM STATUS
 // ============================================================
 
@@ -1637,21 +1671,19 @@ export async function createBill(formData: FormData) {
 
   if (!tenantId || !billingPeriodStart || !billingPeriodEnd || !dueDate) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Please fill in all required fields.")
+      billingRedirect(formData, {
+        error: "Please fill in all required fields.",
+      })
     );
   }
 
   if (!Number.isFinite(rentAmount) || rentAmount < 0) {
-    redirect(
-      "/admin/billing?error=" + encodeURIComponent("Invalid rent amount.")
-    );
+    redirect(billingRedirect(formData, { error: "Invalid rent amount." }));
   }
 
   if (!Number.isFinite(otherCharges) || otherCharges < 0) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Invalid other charges amount.")
+      billingRedirect(formData, { error: "Invalid other charges amount." })
     );
   }
 
@@ -1670,10 +1702,9 @@ export async function createBill(formData: FormData) {
 
   if (tenantError || !tenant) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent(
-          "Tenant not found or does not belong to your dormitory."
-        )
+      billingRedirect(formData, {
+        error: "Tenant not found or does not belong to your dormitory.",
+      })
     );
   }
 
@@ -1700,14 +1731,13 @@ export async function createBill(formData: FormData) {
 
   if (error) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Could not create bill: " + error.message)
+      billingRedirect(formData, { error: "Could not create bill: " + error.message })
     );
   }
 
   revalidatePath("/admin/billing");
 
-  redirect("/admin/billing?saved=1");
+  redirect(billingRedirect(formData, { saved: "1" }));
 }
 
 // ============================================================
@@ -1722,15 +1752,12 @@ export async function recordPayment(formData: FormData) {
   const amount = Number(formData.get("amount"));
 
   if (!billId) {
-    redirect(
-      "/admin/billing?error=" + encodeURIComponent("Bill ID is required.")
-    );
+    redirect(billingRedirect(formData, { error: "Bill ID is required." }));
   }
 
   if (!Number.isFinite(amount) || amount <= 0) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Enter a valid payment amount.")
+      billingRedirect(formData, { error: "Enter a valid payment amount." })
     );
   }
 
@@ -1757,8 +1784,7 @@ export async function recordPayment(formData: FormData) {
 
   if (billError || !bill) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Bill not found or access denied.")
+      billingRedirect(formData, { error: "Bill not found or access denied." })
     );
   }
 
@@ -1769,12 +1795,11 @@ export async function recordPayment(formData: FormData) {
 
   if (amount > remaining) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent(
-          `Payment cannot exceed the remaining balance of ${remaining.toFixed(
-            2
-          )}.`
-        )
+      billingRedirect(formData, {
+        error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(
+          2
+        )}.`,
+      })
     );
   }
 
@@ -1804,8 +1829,9 @@ export async function recordPayment(formData: FormData) {
 
   if (paymentError) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Could not record payment: " + paymentError.message)
+      billingRedirect(formData, {
+        error: "Could not record payment: " + paymentError.message,
+      })
     );
   }
 
@@ -1824,17 +1850,17 @@ export async function recordPayment(formData: FormData) {
 
   if (updateError) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent(
+      billingRedirect(formData, {
+        error:
           "Payment was recorded but bill could not be updated: " +
-            updateError.message
-        )
+          updateError.message,
+      })
     );
   }
 
   revalidatePath("/admin/billing");
 
-  redirect("/admin/billing?saved=1");
+  redirect(billingRedirect(formData, { saved: "1" }));
 }
 
 // ============================================================
@@ -2136,7 +2162,7 @@ export async function deleteBill(formData: FormData) {
   const billId = String(formData.get("billId") ?? "").trim();
 
   if (!billId) {
-    redirect("/admin/billing");
+    redirect(billingRedirect(formData, {}));
   }
 
   const supabase = createAdminClient();
@@ -2154,16 +2180,16 @@ export async function deleteBill(formData: FormData) {
 
   if (billError || !bill) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Bill not found or access denied.")
+      billingRedirect(formData, { error: "Bill not found or access denied." })
     );
   }
 
   // Never delete a bill that already has a payment.
   if (Number(bill.amount_paid) > 0) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Paid or partially paid bills cannot be deleted.")
+      billingRedirect(formData, {
+        error: "Paid or partially paid bills cannot be deleted.",
+      })
     );
   }
 
@@ -2175,14 +2201,280 @@ export async function deleteBill(formData: FormData) {
 
   if (deleteError) {
     redirect(
-      "/admin/billing?error=" +
-        encodeURIComponent("Could not delete bill: " + deleteError.message)
+      billingRedirect(formData, { error: "Could not delete bill: " + deleteError.message })
     );
   }
 
   revalidatePath("/admin/billing");
 
-  redirect("/admin/billing?saved=1");
+  redirect(billingRedirect(formData, { saved: "1" }));
+}
+
+// ============================================================
+// WATER & ELECTRICITY BILLING (public.utility_bills)
+//
+// Assigned to a room, not a tenant -- the owner records the total
+// water/electricity cost for the room, and the app never divides it
+// among the room's tenants. Payment goes straight to the owner (the
+// utility accounts are in their name), so this is a direct
+// owner-recorded payment like recordPayment above, not the tenant
+// "I've Paid" report/confirm flow rent bills use. See migration
+// 0013_utility_bills.sql.
+//
+// Lives on the Billing page's per-room modal (components/
+// room-billing-modal.tsx) rather than a page of its own -- a utility
+// bill is already scoped to a room, the same grouping Billing uses,
+// so there's no separate page for it to justify.
+// ============================================================
+
+export async function createUtilityBill(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const roomId = String(formData.get("roomId") ?? "").trim();
+  const billingPeriodStart = String(
+    formData.get("billingPeriodStart") ?? ""
+  ).trim();
+  const billingPeriodEnd = String(
+    formData.get("billingPeriodEnd") ?? ""
+  ).trim();
+  const dueDate = String(formData.get("dueDate") ?? "").trim();
+  const waterAmount = Number(formData.get("waterAmount") ?? 0);
+  const electricityAmount = Number(formData.get("electricityAmount") ?? 0);
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!roomId || !billingPeriodStart || !billingPeriodEnd || !dueDate) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Please fill in all required fields.",
+      })
+    );
+  }
+
+  if (!Number.isFinite(waterAmount) || waterAmount < 0) {
+    redirect(billingRedirect(formData, { error: "Invalid water amount." }));
+  }
+
+  if (!Number.isFinite(electricityAmount) || electricityAmount < 0) {
+    redirect(
+      billingRedirect(formData, { error: "Invalid electricity amount." })
+    );
+  }
+
+  if (waterAmount <= 0 && electricityAmount <= 0) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Enter a water amount, an electricity amount, or both.",
+      })
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  // ----------------------------------------------------------
+  // Verify room belongs to this dorm
+  // ----------------------------------------------------------
+
+  const { data: room, error: roomError } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (roomError || !room) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Room not found or does not belong to your dormitory.",
+      })
+    );
+  }
+
+  const { error } = await supabase.from("utility_bills").insert({
+    dorm_id: dormId,
+    room_id: room.id,
+
+    billing_period_start: billingPeriodStart,
+    billing_period_end: billingPeriodEnd,
+    due_date: dueDate,
+
+    water_amount: waterAmount,
+    electricity_amount: electricityAmount,
+    notes: notes || null,
+
+    amount_paid: 0,
+    status: "unpaid",
+  });
+
+  if (error) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Could not create utility bill: " + error.message,
+      })
+    );
+  }
+
+  revalidatePath("/admin/billing");
+  revalidatePath("/tenant");
+
+  redirect(billingRedirect(formData, { saved: "1" }));
+}
+
+export async function recordUtilityPayment(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const utilityBillId = String(formData.get("utilityBillId") ?? "").trim();
+  const amount = Number(formData.get("amount"));
+
+  if (!utilityBillId) {
+    redirect(
+      billingRedirect(formData, { error: "Utility bill ID is required." })
+    );
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    redirect(
+      billingRedirect(formData, { error: "Enter a valid payment amount." })
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: utilityBill, error: utilityBillError } = await supabase
+    .from("utility_bills")
+    .select("id, total_amount, amount_paid, dorm_id")
+    .eq("id", utilityBillId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (utilityBillError || !utilityBill) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Utility bill not found or access denied.",
+      })
+    );
+  }
+
+  const totalAmount = Number(utilityBill.total_amount);
+  const currentPaid = Number(utilityBill.amount_paid);
+  const remaining = totalAmount - currentPaid;
+
+  if (amount > remaining) {
+    redirect(
+      billingRedirect(formData, {
+        error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(2)}.`,
+      })
+    );
+  }
+
+  const newAmountPaid = currentPaid + amount;
+  const newStatus =
+    newAmountPaid >= totalAmount
+      ? "paid"
+      : newAmountPaid > 0
+      ? "partial"
+      : "unpaid";
+
+  const session = await getSessionUser();
+
+  // Recorded as dorm-level income, the same way rent payments feed the
+  // Income & Expenses totals -- real money collected for the dorm, just
+  // via a utility reimbursement rather than rent. See app/admin/expenses
+  // and app/admin/page.tsx's income calculation.
+  const { error: transactionError } = await supabase.from("transactions").insert({
+    type: "income",
+    category: "other_income",
+    amount,
+    description: "Utility payment",
+    recorded_by: session!.user.id,
+    occurred_at: new Date().toISOString().slice(0, 10),
+    dorm_id: dormId,
+  });
+
+  if (transactionError) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Could not record payment: " + transactionError.message,
+      })
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("utility_bills")
+    .update({
+      amount_paid: newAmountPaid,
+      status: newStatus,
+    })
+    .eq("id", utilityBill.id)
+    .eq("dorm_id", dormId);
+
+  if (updateError) {
+    redirect(
+      billingRedirect(formData, {
+        error:
+          "Payment was recorded but utility bill could not be updated: " +
+          updateError.message,
+      })
+    );
+  }
+
+  revalidatePath("/admin/billing");
+  revalidatePath("/admin/expenses");
+  revalidatePath("/tenant");
+
+  redirect(billingRedirect(formData, { saved: "1" }));
+}
+
+export async function deleteUtilityBill(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const utilityBillId = String(formData.get("utilityBillId") ?? "").trim();
+
+  if (!utilityBillId) {
+    redirect(billingRedirect(formData, {}));
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: utilityBill, error: utilityBillError } = await supabase
+    .from("utility_bills")
+    .select("id, amount_paid")
+    .eq("id", utilityBillId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (utilityBillError || !utilityBill) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Utility bill not found or access denied.",
+      })
+    );
+  }
+
+  if (Number(utilityBill.amount_paid) > 0) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Paid or partially paid utility bills cannot be deleted.",
+      })
+    );
+  }
+
+  const { error: deleteError } = await supabase
+    .from("utility_bills")
+    .delete()
+    .eq("id", utilityBillId)
+    .eq("dorm_id", dormId);
+
+  if (deleteError) {
+    redirect(
+      billingRedirect(formData, {
+        error: "Could not delete utility bill: " + deleteError.message,
+      })
+    );
+  }
+
+  revalidatePath("/admin/billing");
+
+  redirect(billingRedirect(formData, { saved: "1" }));
 }
 
 // ============================================================

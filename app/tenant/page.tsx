@@ -163,6 +163,24 @@ export default async function TenantPage({
     (pendingReports ?? []).map((p) => p.bill_id)
   );
 
+  // ---------------------------------------------------------
+  // Water & electricity bills for my room -- visible to every
+  // tenant assigned to the room (not just one of them), since the
+  // owner records these per room and the room's tenants split the
+  // total amongst themselves. Not paginated: a room realistically
+  // accumulates a handful of these, not pages of them.
+  // ---------------------------------------------------------
+  const { data: utilityBills } = me?.room_id
+    ? await supabase
+        .from("utility_bills")
+        .select(
+          "id, billing_period_start, billing_period_end, due_date, water_amount, electricity_amount, total_amount, amount_paid, status, notes"
+        )
+        .eq("room_id", me.room_id)
+        .order("due_date", { ascending: false })
+        .limit(12)
+    : { data: [] };
+
   return (
     <>
       <div className="mx-auto max-w-2xl">
@@ -341,6 +359,80 @@ export default async function TenantPage({
             hrefForPage={(p) => (p > 1 ? `/tenant?page=${p}` : "/tenant")}
           />
         </div>
+
+        {/* Water & electricity */}
+        {room && (utilityBills ?? []).length > 0 && (
+          <div className="mb-6 rounded-lg border border-border bg-surface p-6">
+            <p className="mb-1 font-heading text-sm font-semibold">
+              Water &amp; electricity
+            </p>
+            <p className="mb-4 text-xs text-foreground-muted">
+              Billed to Room {room.room_number} as a whole, not split per
+              tenant. Pay your dorm owner directly — split it with your
+              roommates however works for you.
+            </p>
+
+            <div className="space-y-3">
+              {(utilityBills ?? []).map((bill) => {
+                const status = displayBillStatus(bill);
+                const remaining =
+                  Number(bill.total_amount) - Number(bill.amount_paid);
+
+                return (
+                  <div
+                    key={bill.id}
+                    className="rounded-md border border-border p-4"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-medium">
+                        Due {formatBillDate(bill.due_date)}
+                      </p>
+
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${billStatusStyles[status]}`}
+                      >
+                        {status}
+                      </span>
+                    </div>
+
+                    <div className="mb-2 flex items-center justify-between text-xs text-foreground-muted">
+                      <span>
+                        Water {formatMoney(bill.water_amount)} + Electricity{" "}
+                        {formatMoney(bill.electricity_amount)}
+                      </span>
+
+                      <span className="font-mono text-accent">
+                        {formatMoney(bill.total_amount)}
+                      </span>
+                    </div>
+
+                    {bill.notes && (
+                      <p className="mb-2 text-xs text-foreground-muted">
+                        {bill.notes}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2 text-xs">
+                      <span>Paid {formatMoney(bill.amount_paid)}</span>
+
+                      <span
+                        className={
+                          remaining > 0
+                            ? "text-status-overdue"
+                            : "text-status-paid"
+                        }
+                      >
+                        {remaining > 0
+                          ? `${formatMoney(remaining)} remaining`
+                          : "Fully paid"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
