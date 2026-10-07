@@ -4,6 +4,8 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateMaintenanceRequestStatus } from "@/lib/actions";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const statusStyles: Record<string, string> = {
   pending: "bg-status-partial/15 text-status-partial",
@@ -41,9 +43,10 @@ type RequestRow = {
 export default async function MaintenancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; page?: string }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { error, saved, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -69,14 +72,19 @@ export default async function MaintenancePage({
         ]
       : nextActions[status] ?? [];
 
-  const { data: requests } = await supabase
+  const { from, to } = getRange(page);
+
+  const { data: requests, count } = await supabase
     .from("maintenance_requests")
     .select(
-      "id, title, description, status, created_at, room_id, tenants(full_name), rooms(room_number)"
+      "id, title, description, status, created_at, room_id, tenants(full_name), rooms(room_number)",
+      { count: "exact" }
     )
     .eq("dorm_id", dormId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(from, to);
 
+  const totalPages = getTotalPages(count ?? 0);
   const requestRows = (requests as RequestRow[] | null) ?? [];
 
   return (
@@ -180,6 +188,12 @@ export default async function MaintenancePage({
           );
         })}
       </div>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        hrefForPage={(p) => (p > 1 ? `/admin/maintenance?page=${p}` : "/admin/maintenance")}
+      />
     </div>
   );
 }

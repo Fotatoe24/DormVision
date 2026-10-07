@@ -13,6 +13,8 @@ import {
   formatBillDate as formatDate,
   displayBillStatus as displayStatus,
 } from "@/lib/billing";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -22,9 +24,10 @@ const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; page?: string }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { error, saved, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
 
   const session = await getSessionUser();
 
@@ -46,13 +49,26 @@ export default async function BillingPage({
   // LOAD BILLS
   // ============================================================
 
-  const { data: bills, error: billsError } = await supabase
+  const { from: billsFrom, to: billsTo } = getRange(page);
+
+  const { data: bills, count: billsCount, error: billsError } = await supabase
     .from("bills")
     .select(
-      "id, tenant_id, room_id, billing_period_start, billing_period_end, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status"
+      "id, tenant_id, room_id, billing_period_start, billing_period_end, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status",
+      { count: "exact" }
     )
     .eq("dorm_id", dormId)
-    .order("due_date", { ascending: false });
+    .order("due_date", { ascending: false })
+    .range(billsFrom, billsTo);
+
+  const totalPages = getTotalPages(billsCount ?? 0);
+
+  // Unpaginated, status-only -- "N bill(s) still outstanding" has to
+  // describe every bill for the dorm, not just the current page.
+  const { data: allBillStatuses } = await supabase
+    .from("bills")
+    .select("due_date, status, total_amount, amount_paid")
+    .eq("dorm_id", dormId);
 
   if (billsError) {
     console.error("BILLS LOAD ERROR:", billsError);
@@ -123,7 +139,7 @@ export default async function BillingPage({
   // OUTSTANDING COUNT
   // ============================================================
 
-  const outstandingCount = (bills ?? []).filter(
+  const outstandingCount = (allBillStatuses ?? []).filter(
     (bill) => displayStatus(bill) !== "paid"
   ).length;
 
@@ -471,6 +487,12 @@ export default async function BillingPage({
             );
           })}
         </div>
+
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          hrefForPage={(p) => (p > 1 ? `/admin/billing?page=${p}` : "/admin/billing")}
+        />
       </div>
     </main>
   );

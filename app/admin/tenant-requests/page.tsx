@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { approveRegistrationRequest, rejectRegistrationRequest } from "@/lib/actions";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -29,9 +31,10 @@ function formatDate(iso: string) {
 export default async function TenantRequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; reviewedPage?: string }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { error, saved, reviewedPage: reviewedPageParam } = await searchParams;
+  const reviewedPage = parsePage(reviewedPageParam);
 
   const session = await getSessionUser();
 
@@ -43,7 +46,9 @@ export default async function TenantRequestsPage({
 
   const supabase = createAdminClient();
 
-  const [{ data: pending, error: pendingError }, { data: reviewed, error: reviewedError }] =
+  const { from: reviewedFrom, to: reviewedTo } = getRange(reviewedPage);
+
+  const [{ data: pending, error: pendingError }, { data: reviewed, count: reviewedCount, error: reviewedError }] =
     await Promise.all([
       supabase
         .from("tenant_registration_requests")
@@ -55,12 +60,16 @@ export default async function TenantRequestsPage({
         .order("submitted_at", { ascending: true }),
       supabase
         .from("tenant_registration_requests")
-        .select("id, full_name, email, status, submitted_at, reviewed_at, rejection_reason")
+        .select("id, full_name, email, status, submitted_at, reviewed_at, rejection_reason", {
+          count: "exact",
+        })
         .eq("dorm_id", dormId)
         .neq("status", "pending")
         .order("reviewed_at", { ascending: false })
-        .limit(20),
+        .range(reviewedFrom, reviewedTo),
     ]);
+
+  const reviewedTotalPages = getTotalPages(reviewedCount ?? 0);
 
   const loadError = pendingError?.message || reviewedError?.message || null;
 
@@ -206,7 +215,10 @@ export default async function TenantRequestsPage({
       </div>
 
       {/* Reviewed history */}
-      <details className="rounded-lg border border-border bg-surface">
+      <details
+        className="rounded-lg border border-border bg-surface"
+        open={reviewedPage > 1 || undefined}
+      >
         <summary className="cursor-pointer px-4 py-3 text-sm font-heading font-semibold">
           Reviewed requests
         </summary>
@@ -248,6 +260,18 @@ export default async function TenantRequestsPage({
             ))}
           </div>
         )}
+
+        <div className="border-t border-border px-4 py-3">
+          <PaginationControls
+            page={reviewedPage}
+            totalPages={reviewedTotalPages}
+            hrefForPage={(p) =>
+              p > 1
+                ? `/admin/tenant-requests?reviewedPage=${p}`
+                : "/admin/tenant-requests"
+            }
+          />
+        </div>
       </details>
     </div>
   );

@@ -3,6 +3,9 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { confirmPendingPayment, rejectPendingPayment } from "@/lib/actions";
 import { formatMoney, formatBillDate, formatPaymentDate } from "@/lib/billing";
+import { AutoSubmitForm } from "@/components/auto-submit-form";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const methodLabels: Record<string, string> = {
   cash: "Cash",
@@ -19,9 +22,11 @@ export default async function PaymentsPage({
     method?: string;
     from?: string;
     to?: string;
+    page?: string;
   }>;
 }) {
-  const { q, method, from, to } = await searchParams;
+  const { q, method, from, to, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
 
   const session = await getSessionUser();
 
@@ -63,7 +68,7 @@ export default async function PaymentsPage({
 
   let paymentsQuery = supabase
     .from("payments")
-    .select("id, tenant_id, amount, method, paid_at, notes")
+    .select("id, tenant_id, amount, method, paid_at, notes", { count: "exact" })
     .eq("status", "confirmed")
     .order("paid_at", { ascending: false });
 
@@ -79,9 +84,12 @@ export default async function PaymentsPage({
     paymentsQuery = paymentsQuery.lte("paid_at", `${to}T23:59:59`);
   }
 
-  const { data: payments, error: paymentsError } = tenantIds.length
-    ? await paymentsQuery.in("tenant_id", tenantIds)
-    : { data: [], error: null };
+  const { from: rangeFrom, to: rangeTo } = getRange(page);
+
+  const { data: payments, count: paymentsCount, error: paymentsError } =
+    tenantIds.length
+      ? await paymentsQuery.in("tenant_id", tenantIds).range(rangeFrom, rangeTo)
+      : { data: [], count: 0, error: null };
 
   if (paymentsError) {
     return (
@@ -92,6 +100,27 @@ export default async function PaymentsPage({
       </div>
     );
   }
+
+  const totalPages = getTotalPages(paymentsCount ?? 0);
+
+  // Same filters, unpaginated, amount-only -- the summary line below
+  // needs to total every matching payment, not just the current page.
+  let sumQuery = supabase
+    .from("payments")
+    .select("amount")
+    .eq("status", "confirmed");
+
+  if (method && ["cash", "bank_transfer", "gcash", "other"].includes(method)) {
+    sumQuery = sumQuery.eq("method", method);
+  }
+  if (from) sumQuery = sumQuery.gte("paid_at", `${from}T00:00:00`);
+  if (to) sumQuery = sumQuery.lte("paid_at", `${to}T23:59:59`);
+
+  const { data: sumRows } = tenantIds.length
+    ? await sumQuery.in("tenant_id", tenantIds)
+    : { data: [] };
+
+  const total = (sumRows ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
 
   // Tenant-reported payments awaiting owner review -- see
   // lib/actions.ts's reportPayment/confirmPendingPayment/
@@ -116,7 +145,6 @@ export default async function PaymentsPage({
     console.error("Pending payments load error:", pendingError);
   }
 
-  const total = (payments ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
   const hasFilters = Boolean(q || method || from || to);
 
   return (
@@ -127,7 +155,7 @@ export default async function PaymentsPage({
           Payments
         </h1>
         <p className="text-xs text-foreground-muted">
-          {(payments ?? []).length} payment(s) totalling {formatMoney(total)}
+          {paymentsCount ?? 0} payment(s) totalling {formatMoney(total)}
         </p>
       </div>
 
@@ -210,7 +238,7 @@ export default async function PaymentsPage({
       )}
 
       {/* Search + filter */}
-      <form
+      <AutoSubmitForm
         className="mb-4 flex flex-wrap gap-2"
         action="/admin/payments"
       >
@@ -250,7 +278,7 @@ export default async function PaymentsPage({
         >
           Search
         </button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
         {payments && payments.length > 0 ? (
@@ -289,6 +317,21 @@ export default async function PaymentsPage({
           </div>
         )}
       </div>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        hrefForPage={(p) => {
+          const params = new URLSearchParams();
+          if (q) params.set("q", q);
+          if (method) params.set("method", method);
+          if (from) params.set("from", from);
+          if (to) params.set("to", to);
+          if (p > 1) params.set("page", String(p));
+          const qs = params.toString();
+          return qs ? `/admin/payments?${qs}` : "/admin/payments";
+        }}
+      />
     </div>
   );
 }

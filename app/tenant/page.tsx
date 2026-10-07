@@ -11,6 +11,8 @@ import {
   formatBillDate,
   displayBillStatus,
 } from "@/lib/billing";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const methodOptions: { value: string; label: string }[] = [
   { value: "cash", label: "Cash" },
@@ -22,9 +24,10 @@ const methodOptions: { value: string; label: string }[] = [
 export default async function TenantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; page?: string }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { error, saved, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -109,7 +112,9 @@ export default async function TenantPage({
   // bills.tenant_id references tenants.id
   // NOT users.id
   // ---------------------------------------------------------
-  const { data: bills, error: billsError } = me?.id
+  const { from: billsFrom, to: billsTo } = getRange(page);
+
+  const { data: bills, count: billsCount, error: billsError } = me?.id
     ? await supabase
         .from("bills")
         .select(
@@ -126,11 +131,15 @@ export default async function TenantPage({
           total_amount,
           amount_paid,
           status
-          `
+          `,
+          { count: "exact" }
         )
         .eq("tenant_id", me.id)
         .order("due_date", { ascending: false })
-    : { data: [], error: null };
+        .range(billsFrom, billsTo)
+    : { data: [], count: 0, error: null };
+
+  const billsTotalPages = getTotalPages(billsCount ?? 0);
 
   if (billsError) {
     console.error("Bills lookup error:", billsError);
@@ -325,6 +334,12 @@ export default async function TenantPage({
               })}
             </div>
           )}
+
+          <PaginationControls
+            page={page}
+            totalPages={billsTotalPages}
+            hrefForPage={(p) => (p > 1 ? `/tenant?page=${p}` : "/tenant")}
+          />
         </div>
       </div>
     </>

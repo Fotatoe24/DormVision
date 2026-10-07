@@ -12,6 +12,9 @@ import { TransactionModal } from "@/components/transaction-modal";
 import { TransactionRowMenu } from "@/components/transaction-row-menu";
 import { IncomeExpenseChart } from "@/components/income-expense-chart";
 import { ExpenseBreakdownDonut } from "@/components/expense-breakdown-donut";
+import { AutoSubmitForm } from "@/components/auto-submit-form";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 import { Plus } from "lucide-react";
 
 const categoryLabels: Record<string, string> = {
@@ -123,6 +126,7 @@ export default async function ExpensesPage({
     range?: string;
     category?: string;
     q?: string;
+    page?: string;
   }>;
 }) {
   const {
@@ -131,7 +135,9 @@ export default async function ExpensesPage({
     range: rangeParam,
     category: categoryFilter,
     q,
+    page: pageParam,
   } = await searchParams;
+  const page = parsePage(pageParam);
 
   const session = await getSessionUser();
 
@@ -361,11 +367,27 @@ export default async function ExpensesPage({
     return true;
   });
 
+  // Already fully computed in memory above (a merged, sorted union of
+  // two tables) -- paginating here is just slicing that array, not a
+  // second DB round-trip.
+  const totalPages = getTotalPages(displayFeed.length);
+  const { from: pageFrom, to: pageTo } = getRange(page);
+  const pageFeed = displayFeed.slice(pageFrom, pageTo + 1);
+
   function rangeHref(r: Range) {
     const params = new URLSearchParams();
     params.set("range", r);
     if (categoryFilter) params.set("category", categoryFilter);
     if (q) params.set("q", q);
+    return `/admin/expenses?${params.toString()}`;
+  }
+
+  function pageHref(p: number) {
+    const params = new URLSearchParams();
+    params.set("range", range);
+    if (categoryFilter) params.set("category", categoryFilter);
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
     return `/admin/expenses?${params.toString()}`;
   }
 
@@ -454,7 +476,7 @@ export default async function ExpensesPage({
       </div>
 
       {/* Category filter + search */}
-      <form
+      <AutoSubmitForm
         className="mb-3 flex flex-wrap gap-2"
         action="/admin/expenses"
       >
@@ -484,7 +506,7 @@ export default async function ExpensesPage({
         >
           Filter
         </button>
-      </form>
+      </AutoSubmitForm>
 
       {/* Time range */}
       <div className="mb-4 flex flex-wrap gap-2">
@@ -505,13 +527,13 @@ export default async function ExpensesPage({
 
       {/* List */}
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
-        {displayFeed.length > 0 ? (
+        {pageFeed.length > 0 ? (
           <div>
-            {displayFeed.map((row, i) => (
+            {pageFeed.map((row, i) => (
               <div
                 key={row.id}
                 className={`flex items-center justify-between gap-3 px-4 py-3 ${
-                  i < displayFeed.length - 1 ? "border-b border-border" : ""
+                  i < pageFeed.length - 1 ? "border-b border-border" : ""
                 }`}
               >
                 <div className="min-w-0">
@@ -561,6 +583,8 @@ export default async function ExpensesPage({
           </p>
         )}
       </div>
+
+      <PaginationControls page={page} totalPages={totalPages} hrefForPage={pageHref} />
     </div>
   );
 }

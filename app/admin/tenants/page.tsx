@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, displayBillStatus } from "@/lib/billing";
+import { AutoSubmitForm } from "@/components/auto-submit-form";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const tenantStatusStyles: Record<string, string> = {
   active: "bg-status-paid/15 text-status-paid",
@@ -19,9 +22,10 @@ const tenantStatusLabels: Record<string, string> = {
 export default async function TenantsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
-  const { q, status } = await searchParams;
+  const { q, status, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -34,7 +38,9 @@ export default async function TenantsPage({
 
   let query = supabase
     .from("tenants")
-    .select("id, profile_id, full_name, contact_number, status, room_id")
+    .select("id, profile_id, full_name, contact_number, status, room_id", {
+      count: "exact",
+    })
     .eq("dorm_id", dormId)
     .order("full_name");
 
@@ -46,7 +52,11 @@ export default async function TenantsPage({
     query = query.eq("status", status);
   }
 
-  const { data: tenants, error: tenantsError } = await query;
+  const { from, to } = getRange(page);
+  const { data: tenants, count: tenantsCount, error: tenantsError } =
+    await query.range(from, to);
+
+  const totalPages = getTotalPages(tenantsCount ?? 0);
 
   const roomIds = Array.from(
     new Set(
@@ -109,7 +119,7 @@ export default async function TenantsPage({
       </div>
 
       {/* Search + filter */}
-      <form className="mb-4 flex flex-wrap gap-2" action="/admin/tenants">
+      <AutoSubmitForm className="mb-4 flex flex-wrap gap-2" action="/admin/tenants">
         <input
           type="text"
           name="q"
@@ -133,7 +143,7 @@ export default async function TenantsPage({
         >
           Search
         </button>
-      </form>
+      </AutoSubmitForm>
 
       <div className="rounded-lg border border-border bg-surface overflow-hidden">
         {tenants && tenants.length > 0 ? (
@@ -192,6 +202,19 @@ export default async function TenantsPage({
           </div>
         )}
       </div>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        hrefForPage={(p) => {
+          const params = new URLSearchParams();
+          if (q) params.set("q", q);
+          if (status) params.set("status", status);
+          if (p > 1) params.set("page", String(p));
+          const qs = params.toString();
+          return qs ? `/admin/tenants?${qs}` : "/admin/tenants";
+        }}
+      />
     </div>
   );
 }

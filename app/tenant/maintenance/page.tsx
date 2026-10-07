@@ -3,6 +3,8 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { submitMaintenanceRequest } from "@/lib/actions";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
+import { PaginationControls } from "@/components/pagination-controls";
+import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -27,9 +29,10 @@ type RequestRow = {
 export default async function TenantMaintenancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; page?: string }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { error, saved, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -45,14 +48,18 @@ export default async function TenantMaintenancePage({
 
   const { allowRequests } = await getMaintenanceSettings(tenant?.dorm_id);
 
-  const { data: requests } = tenant
+  const { from, to } = getRange(page);
+
+  const { data: requests, count } = tenant
     ? await supabase
         .from("maintenance_requests")
-        .select("id, title, description, status, created_at")
+        .select("id, title, description, status, created_at", { count: "exact" })
         .eq("tenant_id", tenant.id)
         .order("created_at", { ascending: false })
-    : { data: [] };
+        .range(from, to)
+    : { data: [], count: 0 };
 
+  const totalPages = getTotalPages(count ?? 0);
   const requestRows = (requests as RequestRow[] | null) ?? [];
 
   return (
@@ -157,6 +164,12 @@ export default async function TenantMaintenancePage({
           </div>
         ))}
       </div>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        hrefForPage={(p) => (p > 1 ? `/tenant/maintenance?page=${p}` : "/tenant/maintenance")}
+      />
     </div>
   );
 }
