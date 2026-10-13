@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions";
 import { Settings, User, LogOut, ChevronDown } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeMenuItem } from "@/components/theme-menu-item";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { MoreSheet } from "@/components/more-sheet";
@@ -84,6 +84,10 @@ function AccountMenu({
             Admin settings
           </Link>
 
+          <ThemeMenuItem />
+
+          <div className="my-1.5 h-px bg-border" />
+
           <form action={logout}>
             <button
               type="submit"
@@ -139,9 +143,6 @@ export function AdminShell({
 
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
-      <div className="mb-2 flex justify-end">
-        <ThemeToggle />
-      </div>
       <AccountMenu
         ownerName={ownerName}
         direction="up"
@@ -180,15 +181,12 @@ export function AdminShell({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <AccountMenu
-              ownerName={ownerName}
-              align="right"
-              open={accountOpen}
-              onOpenChange={setAccountOpen}
-            />
-          </div>
+          <AccountMenu
+            ownerName={ownerName}
+            align="right"
+            open={accountOpen}
+            onOpenChange={setAccountOpen}
+          />
         </div>
 
         {/* Main content — bottom padding on mobile clears the fixed

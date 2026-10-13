@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions";
-import { LogOut } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { LogOut, User, ChevronDown } from "lucide-react";
+import { ThemeMenuItem } from "@/components/theme-menu-item";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { BrandMark } from "@/components/brand-mark";
@@ -11,20 +13,65 @@ import { tenantNavigation } from "@/lib/navigation";
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
-function SignOutButton({ className }: { className?: string }) {
+// Same shape as AdminShell's AccountMenu (components/admin-shell.tsx),
+// just without Profile/Admin settings rows -- the tenant nav already
+// has its own Profile entry (lib/navigation.ts's tenantProfile), so
+// there's nothing to duplicate here beyond theme + sign out.
+function AccountMenu({
+  align = "left",
+  direction = "down",
+  open,
+  onOpenChange,
+}: {
+  align?: "left" | "right";
+  direction?: "down" | "up";
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
-    <form action={logout}>
+    <div className="relative">
       <button
-        type="submit"
-        aria-label="Sign out"
-        className={`flex items-center gap-2 rounded-md text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground ${focusRing} ${
-          className ?? ""
-        }`}
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="Account"
+        className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-surface-muted ${focusRing}`}
       >
-        <LogOut className="h-4 w-4" />
-        <span className="text-sm">Sign out</span>
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <User className="h-3.5 w-3.5" />
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
       </button>
-    </form>
+
+      {open && (
+        <div
+          role="menu"
+          className={`absolute z-50 w-48 rounded-lg border border-border bg-surface p-1.5 shadow-lg ${
+            align === "right" ? "right-0" : "left-0"
+          } ${direction === "up" ? "bottom-full mb-2" : "mt-2"}`}
+        >
+          <ThemeMenuItem />
+
+          <div className="my-1.5 h-px bg-border" />
+
+          <form action={logout}>
+            <button
+              type="submit"
+              role="menuitem"
+              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -41,12 +88,24 @@ export function TenantShell({
   pendingMaintenanceCount?: number;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [prevPathname, setPrevPathname] = useState(pathname);
+
+  // Same render-time reset pattern as AdminShell — see its own comment
+  // for why this runs here and not in an effect.
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    if (accountOpen) setAccountOpen(false);
+  }
+
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
-      <div className="mb-2 flex justify-end">
-        <ThemeToggle />
-      </div>
-      <SignOutButton className="w-full px-3 py-2" />
+      <AccountMenu
+        direction="up"
+        open={accountOpen}
+        onOpenChange={setAccountOpen}
+      />
     </div>
   );
 
@@ -76,10 +135,11 @@ export function TenantShell({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <SignOutButton className="p-2" />
-          </div>
+          <AccountMenu
+            align="right"
+            open={accountOpen}
+            onOpenChange={setAccountOpen}
+          />
         </div>
 
         <main
