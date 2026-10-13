@@ -41,6 +41,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
   --color-surface-muted: var(--surface-muted);
   --color-foreground: var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
