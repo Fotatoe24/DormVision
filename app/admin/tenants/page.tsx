@@ -22,9 +22,15 @@ const tenantStatusLabels: Record<string, string> = {
 export default async function TenantsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    payment?: string;
+    page?: string;
+  }>;
 }) {
-  const { q, status, page: pageParam } = await searchParams;
+  const { q, status, payment, page: pageParam } = await searchParams;
+
   const page = parsePage(pageParam);
   const session = await getSessionUser();
 
@@ -36,11 +42,11 @@ export default async function TenantsPage({
 
   const supabase = createAdminClient();
 
+  // Fetch tenants matching the search and tenant-status filters.
+  // Payment filtering happens after their balances are calculated.
   let query = supabase
     .from("tenants")
-    .select("id, profile_id, full_name, contact_number, status, room_id", {
-      count: "exact",
-    })
+    .select("id, profile_id, full_name, contact_number, status, room_id")
     .eq("dorm_id", dormId)
     .order("full_name");
 
@@ -52,28 +58,19 @@ export default async function TenantsPage({
     query = query.eq("status", status);
   }
 
-  const { from, to } = getRange(page);
-  const {
-    data: tenants,
-    count: tenantsCount,
-    error: tenantsError,
-  } = await query.range(from, to);
+  const { data: allTenants, error: tenantsError } = await query;
 
-  const totalPages = getTotalPages(tenantsCount ?? 0);
+  if (tenantsError) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
+          Could not load tenants: {tenantsError.message}
+        </div>
+      </div>
+    );
+  }
 
-  const roomIds = Array.from(
-    new Set(
-      (tenants ?? [])
-        .map((t) => t.room_id)
-        .filter((id): id is string => Boolean(id))
-    )
-  );
-
-  const { data: rooms, error: roomsError } = roomIds.length
-    ? await supabase.from("rooms").select("id, room_number").in("id", roomIds)
-    : { data: [], error: null };
-
-  const tenantIds = (tenants ?? []).map((t) => t.id);
+  const tenantIds = (allTenants ?? []).map((t) => t.id);
 
   const { data: bills, error: billsError } = tenantIds.length
     ? await supabase
@@ -82,14 +79,68 @@ export default async function TenantsPage({
         .in("tenant_id", tenantIds)
     : { data: [], error: null };
 
-  const loadError =
-    tenantsError?.message || roomsError?.message || billsError?.message || null;
-
-  if (loadError) {
+  if (billsError) {
     return (
       <div className="mx-auto max-w-3xl">
         <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load tenants: {loadError}
+          Could not load bills: {billsError.message}
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate the outstanding balance for every tenant.
+  const balanceByTenant = new Map<string, number>();
+
+  for (const tenantId of tenantIds) {
+    balanceByTenant.set(tenantId, 0);
+  }
+
+  for (const bill of bills ?? []) {
+    if (displayBillStatus(bill) === "paid") continue;
+
+    const remaining = Math.max(
+      0,
+      Number(bill.total_amount) - Number(bill.amount_paid)
+    );
+
+    balanceByTenant.set(
+      bill.tenant_id,
+      (balanceByTenant.get(bill.tenant_id) ?? 0) + remaining
+    );
+  }
+
+  // Apply the payment-status filter using the calculated balance.
+  const filteredTenants = (allTenants ?? []).filter((tenant) => {
+    const balance = balanceByTenant.get(tenant.id) ?? 0;
+
+    if (payment === "paid") return balance === 0;
+    if (payment === "unpaid") return balance > 0;
+
+    return true;
+  });
+
+  // Paginate only after applying all filters.
+  const totalPages = getTotalPages(filteredTenants.length);
+  const { from, to } = getRange(page);
+  const tenants = filteredTenants.slice(from, to + 1);
+
+  // Fetch room numbers only for the tenants on the current page.
+  const roomIds = Array.from(
+    new Set(
+      tenants.map((t) => t.room_id).filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const { data: rooms, error: roomsError } = roomIds.length
+    ? await supabase.from("rooms").select("id, room_number").in("id", roomIds)
+    : { data: [], error: null };
+
+  if (roomsError) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
+          Could not load rooms: {roomsError.message}
         </div>
       </div>
     );
@@ -99,18 +150,7 @@ export default async function TenantsPage({
     (rooms ?? []).map((r) => [r.id, r.room_number])
   );
 
-  const balanceByTenant = new Map<string, number>();
-  for (const bill of bills ?? []) {
-    const displayStatus = displayBillStatus(bill);
-    if (displayStatus === "paid") continue;
-    const remaining = Number(bill.total_amount) - Number(bill.amount_paid);
-    balanceByTenant.set(
-      bill.tenant_id,
-      (balanceByTenant.get(bill.tenant_id) ?? 0) + remaining
-    );
-  }
-
-  const hasFilters = Boolean(q || status);
+  const hasFilters = Boolean(q || status || payment);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -121,7 +161,7 @@ export default async function TenantsPage({
         </h1>
       </div>
 
-      {/* Search + filter */}
+      {/* Search + tenant and payment filters */}
       <AutoSubmitForm
         className="mb-4 flex flex-wrap gap-2"
         action="/admin/tenants"
@@ -130,19 +170,31 @@ export default async function TenantsPage({
           type="text"
           name="q"
           defaultValue={q ?? ""}
-          placeholder="Search by name…"
+          placeholder="Search by name..."
           className="min-w-[160px] flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary"
         />
+
         <select
           name="status"
           defaultValue={status ?? ""}
           className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
         >
-          <option value="">All statuses</option>
+          <option value="">All tenant statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="moved_out">Moved out</option>
         </select>
+
+        <select
+          name="payment"
+          defaultValue={payment ?? ""}
+          className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+        >
+          <option value="">All payment statuses</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid</option>
+        </select>
+
         <button
           type="submit"
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
@@ -151,14 +203,21 @@ export default async function TenantsPage({
         </button>
       </AutoSubmitForm>
 
-      <div className="rounded-lg border border-border bg-surface overflow-hidden">
-        {tenants && tenants.length > 0 ? (
+      <div className="mb-3 text-xs text-foreground-muted">
+        Showing {filteredTenants.length} tenant
+        {filteredTenants.length !== 1 ? "s" : ""}
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        {tenants.length > 0 ? (
           <div>
             {tenants.map((t, i) => {
               const balance = balanceByTenant.get(t.id) ?? 0;
               const roomNumber = t.room_id
                 ? roomNumberById.get(t.room_id)
                 : null;
+
+              const isPaid = balance === 0;
 
               return (
                 <Link
@@ -175,16 +234,28 @@ export default async function TenantsPage({
                       {t.contact_number ? ` · ${t.contact_number}` : ""}
                     </p>
                   </div>
+
                   <div className="flex shrink-0 items-center gap-3">
-                    <span
-                      className={`font-mono text-sm ${
-                        balance > 0
-                          ? "text-status-overdue"
-                          : "text-foreground-muted"
-                      }`}
-                    >
-                      {balance > 0 ? formatMoney(balance) : "—"}
-                    </span>
+                    <div className="text-right">
+                      <p
+                        className={`font-mono text-sm ${
+                          balance > 0
+                            ? "text-status-overdue"
+                            : "text-foreground-muted"
+                        }`}
+                      >
+                        {balance > 0 ? formatMoney(balance) : "—"}
+                      </p>
+
+                      <span
+                        className={`text-xs font-medium ${
+                          isPaid ? "text-status-paid" : "text-status-unpaid"
+                        }`}
+                      >
+                        {isPaid ? "Paid" : "Unpaid"}
+                      </span>
+                    </div>
+
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         tenantStatusStyles[t.status] ?? ""
@@ -214,10 +285,14 @@ export default async function TenantsPage({
         totalPages={totalPages}
         hrefForPage={(p) => {
           const params = new URLSearchParams();
+
           if (q) params.set("q", q);
           if (status) params.set("status", status);
+          if (payment) params.set("payment", payment);
           if (p > 1) params.set("page", String(p));
+
           const qs = params.toString();
+
           return qs ? `/admin/tenants?${qs}` : "/admin/tenants";
         }}
       />
