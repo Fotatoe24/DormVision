@@ -151,6 +151,24 @@ export default async function AdminPage() {
 
   const activeTenants = tenantRows.filter((t) => t.status === "active");
 
+  // Only available and full rooms contribute to usable capacity.
+  const usableRooms = roomRows.filter(
+    (room) => room.status === "available" || room.status === "full"
+  );
+
+  const usableRoomIds = new Set(usableRooms.map((room) => room.id));
+
+  // Sum the actual bed capacity of usable rooms.
+  const totalCapacity = usableRooms.reduce(
+    (sum, room) => sum + Math.max(0, Number(room.capacity) || 0),
+    0
+  );
+
+  // Count active tenants assigned to usable rooms.
+  const occupiedBeds = activeTenants.filter(
+    (tenant) => tenant.room_id !== null && usableRoomIds.has(tenant.room_id)
+  ).length;
+
   const now = new Date();
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -316,7 +334,7 @@ export default async function AdminPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="font-heading text-lg font-semibold text-primary">
-          Good morning, {ownerFirstName}
+          Hi, {ownerFirstName}
         </h1>
         <p className="text-xs text-foreground-muted">
           Here&apos;s what&apos;s happening with{" "}
@@ -393,7 +411,12 @@ export default async function AdminPage() {
           <p className="mb-4 font-heading text-sm font-semibold">
             Room Occupancy
           </p>
-          <RoomOccupancyMeter counts={roomCounts} totalRooms={totalRooms} />
+          <RoomOccupancyMeter
+            counts={roomCounts}
+            totalRooms={totalRooms}
+            occupiedBeds={occupiedBeds}
+            totalCapacity={totalCapacity}
+          />
         </div>
       </div>
 
