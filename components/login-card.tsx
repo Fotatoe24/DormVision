@@ -21,7 +21,7 @@ export function LoginCard() {
       <ToastListener />
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <BrandMark className="mb-3 h-32 w-32" />
+          <BrandMark className="h-32 w-32" />
           <h1 className="font-heading text-2xl font-semibold text-foreground">
             DormVision
           </h1>
