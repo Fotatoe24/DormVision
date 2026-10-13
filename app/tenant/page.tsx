@@ -9,10 +9,13 @@ import {
   billStatusStyles,
   formatMoney,
   formatBillDate,
+  formatPaymentDate,
   displayBillStatus,
+  paymentMethodLabels,
 } from "@/lib/billing";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
+import { Receipt } from "lucide-react";
 
 const methodOptions: { value: string; label: string }[] = [
   { value: "cash", label: "Cash" },
@@ -162,6 +165,22 @@ export default async function TenantPage({
   const pendingBillIds = new Set(
     (pendingReports ?? []).map((p) => p.bill_id)
   );
+
+  // ---------------------------------------------------------
+  // Payment history -- confirmed payments only, each with a receipt
+  // (see lib/receipts.ts / app/receipts/[id]). Capped rather than
+  // paginated: see the same reasoning as the utility bills list just
+  // below.
+  // ---------------------------------------------------------
+  const { data: confirmedPayments } = me?.id
+    ? await supabase
+        .from("payments")
+        .select("id, amount, method, paid_at")
+        .eq("tenant_id", me.id)
+        .eq("status", "confirmed")
+        .order("paid_at", { ascending: false })
+        .limit(10)
+    : { data: [] };
 
   // ---------------------------------------------------------
   // Water & electricity bills for my room -- visible to every
@@ -359,6 +378,42 @@ export default async function TenantPage({
             hrefForPage={(p) => (p > 1 ? `/tenant?page=${p}` : "/tenant")}
           />
         </div>
+
+        {/* Payment history */}
+        {(confirmedPayments ?? []).length > 0 && (
+          <div className="mb-6 rounded-lg border border-border bg-surface p-6">
+            <p className="mb-4 font-heading text-sm font-semibold">
+              Payment history
+            </p>
+
+            <div className="space-y-2">
+              {(confirmedPayments ?? []).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2.5 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      {formatMoney(p.amount)}
+                    </p>
+                    <p className="text-foreground-muted">
+                      {formatPaymentDate(p.paid_at)} ·{" "}
+                      {paymentMethodLabels[p.method] ?? p.method}
+                    </p>
+                  </div>
+
+                  <a
+                    href={`/receipts/${p.id}`}
+                    className="flex shrink-0 items-center gap-1 font-medium text-primary hover:underline"
+                  >
+                    <Receipt className="h-3.5 w-3.5" />
+                    Receipt
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Water & electricity */}
         {room && (utilityBills ?? []).length > 0 && (

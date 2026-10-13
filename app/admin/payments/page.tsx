@@ -6,6 +6,7 @@ import { formatMoney, formatBillDate, formatPaymentDate } from "@/lib/billing";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
+import { Receipt } from "lucide-react";
 
 const methodLabels: Record<string, string> = {
   cash: "Cash",
@@ -300,9 +301,18 @@ export default async function PaymentsPage({
                     {p.notes ? ` · ${p.notes}` : ""}
                   </p>
                 </div>
-                <span className="shrink-0 font-mono text-sm text-status-paid">
-                  {formatMoney(p.amount)}
-                </span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="font-mono text-sm text-status-paid">
+                    {formatMoney(p.amount)}
+                  </span>
+                  <a
+                    href={`/receipts/${p.id}`}
+                    className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <Receipt className="h-3.5 w-3.5" />
+                    Receipt
+                  </a>
+                </div>
               </div>
             ))}
           </div>
