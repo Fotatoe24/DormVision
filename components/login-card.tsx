@@ -3,6 +3,7 @@ import { login } from "@/lib/actions";
 import { ToastListener } from "@/components/toast-listener";
 import { SubmitButton } from "@/components/submit-button";
 import { PasswordInput } from "@/components/password-input";
+import { BrandMark } from "@/components/brand-mark";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -19,23 +20,7 @@ export function LoginCard() {
       <ToastListener />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-primary text-surface">
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M3 21h18" />
-              <path d="M5 21V7l8-4 8 4v14" />
-              <path d="M9 21v-6h6v6" />
-            </svg>
-          </div>
+          <BrandMark className="mb-4 h-12 w-12" />
           <h1 className="font-heading text-lg font-semibold text-foreground">
             DormVision
           </h1>
