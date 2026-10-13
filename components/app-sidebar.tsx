@@ -58,7 +58,7 @@ export function AppSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-surface sm:flex">
+    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-sidebar sm:flex">
       <div className="flex shrink-0 items-center gap-2 px-4 py-4">
         <BrandMark />
         <div className="min-w-0">
