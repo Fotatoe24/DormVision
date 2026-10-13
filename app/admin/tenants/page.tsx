@@ -53,8 +53,11 @@ export default async function TenantsPage({
   }
 
   const { from, to } = getRange(page);
-  const { data: tenants, count: tenantsCount, error: tenantsError } =
-    await query.range(from, to);
+  const {
+    data: tenants,
+    count: tenantsCount,
+    error: tenantsError,
+  } = await query.range(from, to);
 
   const totalPages = getTotalPages(tenantsCount ?? 0);
 
@@ -119,7 +122,10 @@ export default async function TenantsPage({
       </div>
 
       {/* Search + filter */}
-      <AutoSubmitForm className="mb-4 flex flex-wrap gap-2" action="/admin/tenants">
+      <AutoSubmitForm
+        className="mb-4 flex flex-wrap gap-2"
+        action="/admin/tenants"
+      >
         <input
           type="text"
           name="q"
@@ -170,15 +176,6 @@ export default async function TenantsPage({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span
-                      className={`font-mono text-sm ${
-                        balance > 0
-                          ? "text-status-overdue"
-                          : "text-foreground-muted"
-                      }`}
-                    >
-                      {balance > 0 ? formatMoney(balance) : "—"}
-                    </span>
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         tenantStatusStyles[t.status] ?? ""
