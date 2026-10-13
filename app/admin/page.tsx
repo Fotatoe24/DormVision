@@ -413,7 +413,6 @@ export default async function AdminPage() {
           </p>
           <RoomOccupancyMeter
             counts={roomCounts}
-            totalRooms={totalRooms}
             occupiedBeds={occupiedBeds}
             totalCapacity={totalCapacity}
           />
