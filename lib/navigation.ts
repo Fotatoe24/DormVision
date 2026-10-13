@@ -113,12 +113,6 @@ const monitoring: NavItem = {
   href: "/admin/monitoring",
   icon: BarChart3,
 };
-const adminSettings: NavItem = {
-  key: "settings",
-  label: "Settings",
-  href: "/admin/settings",
-  icon: Settings,
-};
 
 export const adminNavigation: NavConfig = {
   primary: [dashboard, rooms, tenants, billing],
@@ -127,7 +121,6 @@ export const adminNavigation: NavConfig = {
       label: "Management",
       items: [tenantRequests, maintenance, payments, expenses, monitoring],
     },
-    { label: "System", items: [adminSettings] },
   ],
   desktopGroups: [
     {
@@ -144,7 +137,6 @@ export const adminNavigation: NavConfig = {
         monitoring,
       ],
     },
-    { label: "System", items: [adminSettings] },
   ],
 };
 
