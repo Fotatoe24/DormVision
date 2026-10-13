@@ -1,39 +1,39 @@
 @import "tailwindcss";
 
 /* ============================================================
-   DormVision — Ledger & Brass design tokens
+   DormVision — Navy & Teal design tokens
    ============================================================ */
 
 :root {
-  --background: #f3f5f1;
+  --background: #f4f7f9;
   --surface: #ffffff;
-  --surface-muted: #e8ece5;
-  --foreground: #1b1f1d;
-  --foreground-muted: #5b655e;
-  --primary: #1f4d3d;
-  --accent: #b8863b;
-  --border: #d8ded4;
+  --surface-muted: #edf2f5;
+  --foreground: #17232d;
+  --foreground-muted: #647482;
+  --primary: #079b8e;
+  --accent: #dca348;
+  --border: #dfe7ec;
 
-  --status-paid: #4b7a5e;
-  --status-partial: #c99a3e;
-  --status-unpaid: #8b8378;
-  --status-overdue: #b14833;
+  --status-paid: #159b78;
+  --status-partial: #dca348;
+  --status-unpaid: #83909b;
+  --status-overdue: #dc5555;
 }
 
 .dark {
-  --background: #10140f;
-  --surface: #1a211b;
-  --surface-muted: #212a22;
-  --foreground: #edeae2;
-  --foreground-muted: #9aa398;
-  --primary: #6fbf9b;
-  --accent: #d9a85c;
-  --border: #2a332b;
+  --background: #0d1720;
+  --surface: #15232e;
+  --surface-muted: #1d303c;
+  --foreground: #e9f0f4;
+  --foreground-muted: #9aadb9;
+  --primary: #20b5a5;
+  --accent: #e7b75e;
+  --border: #2b404d;
 
-  --status-paid: #6fbf9b;
-  --status-partial: #d9a85c;
-  --status-unpaid: #7e877d;
-  --status-overdue: #d9695a;
+  --status-paid: #42c49a;
+  --status-partial: #e7b75e;
+  --status-unpaid: #9aa7b0;
+  --status-overdue: #ff7777;
 }
 
 @theme inline {
