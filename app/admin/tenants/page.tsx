@@ -190,9 +190,9 @@ export default async function TenantsPage({
           defaultValue={payment ?? ""}
           className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
         >
-          <option value="">All payment statuses</option>
-          <option value="paid">Paid</option>
-          <option value="unpaid">Unpaid</option>
+          <option value="">All Statuses</option>
+          <option value="paid">Paid Only</option>
+          <option value="unpaid">Unpaid Only</option>
         </select>
 
         <button
