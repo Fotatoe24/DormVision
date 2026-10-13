@@ -5,37 +5,37 @@
    ============================================================ */
 
 :root {
-  --background: #f4f7f9;
+  --background: #f5f7fa;
   --surface: #ffffff;
-  --sidebar: #032C48;
-  --surface-muted: #edf2f5;
-  --foreground: #17232d;
-  --foreground-muted: #647482;
-  --primary: #079b8e;
-  --accent: #dca348;
-  --border: #dfe7ec;
+  --sidebar: #0a2f4e;
+  --surface-muted: #eef3f6;
+  --foreground: #1b2733;
+  --foreground-muted: #6b7785;
+  --primary: #0e8e7e;
+  --accent: #f29a3b;
+  --border: #e3e9ef;
 
-  --status-paid: #159b78;
-  --status-partial: #dca348;
+  --status-paid: #1e9e73;
+  --status-partial: #f29a3b;
   --status-unpaid: #83909b;
-  --status-overdue: #dc5555;
+  --status-overdue: #e0453f;
 }
 
 .dark {
-  --background: #0d1720;
-  --surface: #15232e;
-  --sidebar: #15232e;
-  --surface-muted: #1d303c;
-  --foreground: #e9f0f4;
-  --foreground-muted: #9aadb9;
-  --primary: #20b5a5;
-  --accent: #e7b75e;
-  --border: #2b404d;
+  --background: #08141f;
+  --surface: #0f2233;
+  --sidebar: #0a2f4e;
+  --surface-muted: #16303f;
+  --foreground: #e8eff5;
+  --foreground-muted: #9aaebd;
+  --primary: #1fb5a3;
+  --accent: #f5ab58;
+  --border: #234257;
 
-  --status-paid: #42c49a;
-  --status-partial: #e7b75e;
+  --status-paid: #3fc79b;
+  --status-partial: #f5ab58;
   --status-unpaid: #9aa7b0;
-  --status-overdue: #ff7777;
+  --status-overdue: #ff7a73;
 }
 
 @theme inline {
