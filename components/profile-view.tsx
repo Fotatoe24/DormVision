@@ -9,13 +9,13 @@ import { logout } from "@/lib/actions";
 import { ArrowLeft } from "lucide-react";
 
 const AVATAR_COLORS = [
-  "#1f4d3d",
-  "#b8863b",
-  "#4b7a5e",
-  "#c99a3e",
-  "#8b8378",
-  "#b14833",
-  "#1b1f1d",
+  "#0c9488",
+  "#0f3657",
+  "#2ba686",
+  "#ec9a3b",
+  "#8a9aa8",
+  "#f54f4e",
+  "#13222d",
 ];
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;

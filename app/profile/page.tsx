@@ -47,7 +47,7 @@ export default async function ProfilePage() {
         fullName: me.full_name,
         email: me.email,
         role: me.role,
-        avatarColor: me.avatar_color ?? "#1f4d3d",
+        avatarColor: me.avatar_color ?? "#0c9488",
         avatarUrl: me.avatar_url,
         createdAt: me.created_at,
         dormName: dorm?.name,
