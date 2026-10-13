@@ -24,6 +24,7 @@ export default async function TenantLayout({
   return (
     <TenantShell
       dormName={dormName}
+      tenantName={session.profile?.full_name}
       pendingMaintenanceCount={pendingMaintenanceCount}
     >
       {children}

@@ -40,5 +40,9 @@ export default async function ProfileLayout({
 
   const dormName = await getDormName(session.profile?.dorm_id);
 
-  return <TenantShell dormName={dormName}>{children}</TenantShell>;
+  return (
+    <TenantShell dormName={dormName} tenantName={session.profile?.full_name}>
+      {children}
+    </TenantShell>
+  );
 }

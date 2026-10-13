@@ -18,11 +18,13 @@ const focusRing =
 // has its own Profile entry (lib/navigation.ts's tenantProfile), so
 // there's nothing to duplicate here beyond theme + sign out.
 function AccountMenu({
+  tenantName,
   align = "left",
   direction = "down",
   open,
   onOpenChange,
 }: {
+  tenantName?: string;
   align?: "left" | "right";
   direction?: "down" | "up";
   open: boolean;
@@ -36,13 +38,18 @@ function AccountMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Account"
-        className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-surface-muted ${focusRing}`}
+        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-muted ${focusRing}`}
       >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
           <User className="h-3.5 w-3.5" />
         </span>
+        <span className="hidden min-w-0 sm:block">
+          <span className="block truncate text-xs font-medium text-foreground">
+            {tenantName ?? "Tenant"}
+          </span>
+        </span>
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform ${
+          className={`hidden h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform sm:block ${
             open ? "rotate-180" : ""
           }`}
         />
@@ -81,10 +88,12 @@ function AccountMenu({
 // safe-area-aware pattern for consistency.
 export function TenantShell({
   dormName,
+  tenantName,
   pendingMaintenanceCount = 0,
   children,
 }: {
   dormName?: string;
+  tenantName?: string;
   pendingMaintenanceCount?: number;
   children: React.ReactNode;
 }) {
@@ -102,6 +111,7 @@ export function TenantShell({
   const sidebarFooter = (
     <div className="border-t border-border px-3 py-3">
       <AccountMenu
+        tenantName={tenantName}
         direction="up"
         open={accountOpen}
         onOpenChange={setAccountOpen}
@@ -136,6 +146,7 @@ export function TenantShell({
           </div>
 
           <AccountMenu
+            tenantName={tenantName}
             align="right"
             open={accountOpen}
             onOpenChange={setAccountOpen}
