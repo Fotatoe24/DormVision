@@ -177,6 +177,15 @@ export default async function TenantsPage({
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span
+                      className={`font-mono text-sm ${
+                        balance > 0
+                          ? "text-status-overdue"
+                          : "text-foreground-muted"
+                      }`}
+                    >
+                      {balance > 0 ? formatMoney(balance) : "—"}
+                    </span>
+                    <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         tenantStatusStyles[t.status] ?? ""
                       }`}
