@@ -52,8 +52,8 @@
   --color-status-overdue: var(--status-overdue);
 
   --font-sans: var(--font-inter);
-  --font-heading: var(--font-plex-sans);
-  --font-mono: var(--font-plex-mono);
+  --font-heading: var(--font-manrope);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 body {
