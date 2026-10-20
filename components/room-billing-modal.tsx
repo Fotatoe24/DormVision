@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { X, FileText } from "lucide-react";
 import { useDismissableOverlay } from "@/components/use-dismissable-overlay";
 import {
   billStatusStyles,
@@ -188,11 +189,20 @@ export function RoomBillingModal({
                                     <span>
                                       Due {formatBillDate(bill.due_date)}
                                     </span>
-                                    <span
-                                      className={`rounded-full px-2 py-0.5 font-medium capitalize ${billStatusStyles[status]}`}
-                                    >
-                                      {status}
-                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <Link
+                                        href={`/invoices/${bill.id}`}
+                                        className="flex items-center gap-1 font-medium text-primary hover:underline"
+                                      >
+                                        <FileText className="h-3 w-3" />
+                                        Invoice
+                                      </Link>
+                                      <span
+                                        className={`rounded-full px-2 py-0.5 font-medium capitalize ${billStatusStyles[status]}`}
+                                      >
+                                        {status}
+                                      </span>
+                                    </div>
                                   </div>
 
                                   <div className="mb-1.5 flex items-center justify-between text-foreground-muted">

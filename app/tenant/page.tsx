@@ -16,7 +16,7 @@ import {
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 import { BillPaymentBreakdown } from "@/components/bill-payment-breakdown";
-import { Receipt } from "lucide-react";
+import { Receipt, FileText } from "lucide-react";
 
 const methodOptions: { value: string; label: string }[] = [
   { value: "cash", label: "Cash" },
@@ -409,11 +409,21 @@ export default async function TenantPage({
                         Due {formatBillDate(bill.due_date)}
                       </p>
 
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${billStatusStyles[status]}`}
-                      >
-                        {status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/invoices/${bill.id}`}
+                          className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          <FileText className="h-3 w-3" />
+                          Invoice
+                        </Link>
+
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${billStatusStyles[status]}`}
+                        >
+                          {status}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mb-2 flex items-center justify-between text-xs text-foreground-muted">
