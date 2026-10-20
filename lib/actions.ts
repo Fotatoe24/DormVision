@@ -1888,7 +1888,7 @@ export async function reportPayment(formData: FormData) {
   const method = validMethods.includes(rawMethod) ? rawMethod : "cash";
 
   if (!billId) {
-    redirect("/tenant?error=" + encodeURIComponent("Bill ID is required."));
+    redirect("/tenant/billing?error=" + encodeURIComponent("Bill ID is required."));
   }
 
   const admin = createAdminClient();
@@ -1900,7 +1900,9 @@ export async function reportPayment(formData: FormData) {
     .maybeSingle();
 
   if (!tenant) {
-    redirect("/tenant?error=" + encodeURIComponent("Tenant record not found."));
+    redirect(
+      "/tenant/billing?error=" + encodeURIComponent("Tenant record not found.")
+    );
   }
 
   const { data: bill, error: billError } = await admin
@@ -1911,14 +1913,15 @@ export async function reportPayment(formData: FormData) {
     .single();
 
   if (billError || !bill) {
-    redirect("/tenant?error=" + encodeURIComponent("Bill not found."));
+    redirect("/tenant/billing?error=" + encodeURIComponent("Bill not found."));
   }
 
   const remaining = Number(bill.total_amount) - Number(bill.amount_paid);
 
   if (remaining <= 0) {
     redirect(
-      "/tenant?error=" + encodeURIComponent("This bill is already fully paid.")
+      "/tenant/billing?error=" +
+        encodeURIComponent("This bill is already fully paid.")
     );
   }
 
@@ -1933,7 +1936,7 @@ export async function reportPayment(formData: FormData) {
 
   if (existingPending) {
     redirect(
-      "/tenant?error=" +
+      "/tenant/billing?error=" +
         encodeURIComponent(
           "You already have a payment report pending review for this bill."
         )
@@ -1952,16 +1955,16 @@ export async function reportPayment(formData: FormData) {
 
   if (insertError) {
     redirect(
-      "/tenant?error=" +
+      "/tenant/billing?error=" +
         encodeURIComponent(
           "Could not submit payment report: " + insertError.message
         )
     );
   }
 
-  revalidatePath("/tenant");
+  revalidatePath("/tenant/billing");
   redirect(
-    "/tenant?saved=" +
+    "/tenant/billing?saved=" +
       encodeURIComponent("Payment reported. Your dorm owner will confirm it.")
   );
 }

@@ -113,6 +113,12 @@ const monitoring: NavItem = {
   href: "/admin/monitoring",
   icon: BarChart3,
 };
+const adminSettings: NavItem = {
+  key: "settings",
+  label: "Settings",
+  href: "/admin/settings",
+  icon: Settings,
+};
 
 export const adminNavigation: NavConfig = {
   primary: [dashboard, rooms, tenants, billing],
@@ -121,6 +127,7 @@ export const adminNavigation: NavConfig = {
       label: "Management",
       items: [tenantRequests, maintenance, payments, expenses, monitoring],
     },
+    { label: "System", items: [adminSettings] },
   ],
   desktopGroups: [
     {
@@ -137,12 +144,14 @@ export const adminNavigation: NavConfig = {
         monitoring,
       ],
     },
+    { label: "System", items: [adminSettings] },
   ],
 };
 
-// Real tenant-facing routes: just /tenant (room + billing, all on one
-// page) and the shared /profile page. There is no separate "My Room",
-// "Payments", "Requests", or "Notifications" route to link to, so the
+// Real tenant-facing routes: /tenant (room + water & electricity),
+// /tenant/billing (rent bills, payment reporting, payment history),
+// /tenant/maintenance, and the shared /profile page. There is no
+// separate "Requests" or "Notifications" route to link to, so the
 // tenant nav stays honestly small rather than padded out with items
 // that go nowhere new.
 const tenantHome: NavItem = {
@@ -150,6 +159,12 @@ const tenantHome: NavItem = {
   label: "Home",
   href: "/tenant",
   icon: Home,
+};
+const tenantBilling: NavItem = {
+  key: "billing",
+  label: "Billing",
+  href: "/tenant/billing",
+  icon: Receipt,
 };
 const tenantProfile: NavItem = {
   key: "profile",
@@ -159,9 +174,11 @@ const tenantProfile: NavItem = {
 };
 
 export const tenantNavigation: NavConfig = {
-  primary: [tenantHome, tenantMaintenance, tenantProfile],
+  primary: [tenantHome, tenantBilling, tenantMaintenance, tenantProfile],
   secondaryGroups: [],
-  desktopGroups: [{ items: [tenantHome, tenantMaintenance, tenantProfile] }],
+  desktopGroups: [
+    { items: [tenantHome, tenantBilling, tenantMaintenance, tenantProfile] },
+  ],
 };
 
 export function allSecondaryItems(config: NavConfig): NavItem[] {
