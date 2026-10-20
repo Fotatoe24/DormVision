@@ -8,8 +8,21 @@ import {
   billStatusStyles,
   formatMoney,
   formatBillDate,
+  formatPaymentDate,
   displayBillStatus,
+  getAccountStanding,
 } from "@/lib/billing";
+import { Pencil, Wallet, Clock, Receipt, BedDouble } from "lucide-react";
+
+// "{Month} Rent" for a Recent Transactions row, derived from the
+// underlying bill's billing period (there's no free-text description
+// on a payments row) -- "Rent" alone if the bill relation didn't come
+// through for some reason, rather than guessing a month.
+function rentDescription(periodStart?: string | null) {
+  if (!periodStart) return "Rent";
+  const d = new Date(periodStart + "T00:00:00");
+  return `${d.toLocaleDateString("en-PH", { month: "short" })} Rent`;
+}
 
 // Home -- just "what's going on with my room right now": water &
 // electricity and room/roommates. Rent billing (the bill list,
@@ -117,17 +130,65 @@ export default async function TenantPage({
         .limit(12)
     : { data: [] };
 
+  // ---------------------------------------------------------
+  // Account standing -- a glanceable "Outstanding Balance" / "Next Due
+  // Date" summary, not the full bill list (that's /tenant/billing).
+  // getAccountStanding does the same derivation the Billing tab's own
+  // bills implicitly rely on, so the two can never disagree about
+  // what's actually owed. Capped, not paginated -- same "small-dorm
+  // scale" reasoning as the utility bills query above.
+  // ---------------------------------------------------------
+  const { data: standingBills } = me?.id
+    ? await supabase
+        .from("bills")
+        .select("due_date, status, total_amount, amount_paid")
+        .eq("tenant_id", me.id)
+        .order("due_date", { ascending: false })
+        .limit(50)
+    : { data: [] };
+
+  const standing = getAccountStanding(standingBills ?? []);
+
+  // ---------------------------------------------------------
+  // Recent transactions -- just the last 3 confirmed payments for the
+  // "at a glance" card below, not the full history (that's the
+  // Payment history card on /tenant/billing).
+  // ---------------------------------------------------------
+  const { data: recentPayments } = me?.id
+    ? await supabase
+        .from("payments")
+        .select("id, amount, method, paid_at, bills(billing_period_start)")
+        .eq("tenant_id", me.id)
+        .eq("status", "confirmed")
+        .order("paid_at", { ascending: false })
+        .limit(3)
+    : { data: [] };
+
+  type RecentPaymentBillRel = { billing_period_start: string } | null;
+
+  const latestPayment = (recentPayments ?? [])[0] ?? null;
+  const firstName = (session.profile?.full_name ?? "there").split(" ")[0];
+
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="font-heading text-sm font-semibold text-foreground">
-          My dashboard
-        </p>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
+            Dashboard
+          </p>
+          <h1 className="mt-1 font-heading text-2xl font-bold text-foreground">
+            Welcome, {firstName}!
+          </h1>
+          <p className="mt-1 text-sm text-foreground-muted">
+            Here&apos;s your dormitory account overview.
+          </p>
+        </div>
 
         <Link
           href="/profile"
-          className="text-xs font-medium text-primary hover:underline"
+          className="mt-1 flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
         >
+          <Pencil className="h-3.5 w-3.5" />
           Edit profile
         </Link>
       </div>
@@ -140,6 +201,121 @@ export default async function TenantPage({
       {saved && (
         <div className="mb-4 rounded-md border border-status-paid/30 bg-status-paid/10 px-3 py-2 text-xs text-status-paid">
           {saved}
+        </div>
+      )}
+
+      {/* Account-standing tiles -- a glanceable summary; the full
+          bill list and payment reporting live on the Billing tab. */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-lg bg-surface-muted p-4">
+          <span
+            className={`mb-2 flex h-8 w-8 items-center justify-center rounded-md ${
+              standing.balance > 0.004
+                ? "bg-status-partial/15 text-status-partial"
+                : "bg-status-paid/15 text-status-paid"
+            }`}
+          >
+            <Wallet className="h-4 w-4" />
+          </span>
+          <p className="text-xs text-foreground-muted">Outstanding Balance</p>
+          <p
+            className={`mt-1 font-mono text-lg font-bold ${
+              standing.balance > 0.004
+                ? "text-status-partial"
+                : "text-foreground"
+            }`}
+          >
+            {formatMoney(standing.balance)}
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-surface-muted p-4">
+          <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 text-accent">
+            <Clock className="h-4 w-4" />
+          </span>
+          <p className="text-xs text-foreground-muted">Next Due Date</p>
+          <p className="mt-1 text-lg font-bold text-foreground">
+            {standing.nextBill
+              ? formatBillDate(standing.nextBill.due_date)
+              : "—"}
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-surface-muted p-4">
+          <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Receipt className="h-4 w-4" />
+          </span>
+          <p className="text-xs text-foreground-muted">Latest Payment</p>
+          <p className="mt-1 font-mono text-lg font-bold text-foreground">
+            {latestPayment ? formatMoney(latestPayment.amount) : "—"}
+          </p>
+          {latestPayment && (
+            <span className="mt-1.5 inline-block rounded-full bg-status-paid/15 px-2 py-0.5 text-[11px] font-medium text-status-paid">
+              Confirmed
+            </span>
+          )}
+        </div>
+
+        <div className="rounded-lg bg-surface-muted p-4">
+          <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 text-accent">
+            <BedDouble className="h-4 w-4" />
+          </span>
+          <p className="text-xs text-foreground-muted">Assigned Room</p>
+          <p className="mt-1 text-lg font-bold text-foreground">
+            {room ? room.room_number : "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Recent transactions -- short, capped list; the full history
+          with receipts lives on the Billing tab's Payment history card. */}
+      {(recentPayments ?? []).length > 0 && (
+        <div className="mb-5 rounded-lg border border-border bg-surface p-6">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-heading text-sm font-semibold">
+              Recent transactions
+            </p>
+            <Link
+              href="/tenant/billing"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              View billing
+            </Link>
+          </div>
+
+          <div className="space-y-2">
+            {(recentPayments ?? []).map((p) => {
+              const billRel = p.bills as
+                | RecentPaymentBillRel
+                | RecentPaymentBillRel[];
+              const bill = Array.isArray(billRel) ? billRel[0] : billRel;
+
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2.5 text-sm"
+                >
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {rentDescription(bill?.billing_period_start)}
+                    </p>
+                    <p className="text-xs text-foreground-muted">
+                      {formatPaymentDate(p.paid_at)}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="font-mono text-sm font-medium text-foreground">
+                      {formatMoney(p.amount)}
+                    </p>
+                    <span className="mt-0.5 inline-block rounded-full bg-status-paid/15 px-2 py-0.5 text-[11px] font-medium text-status-paid">
+                      Confirmed
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
