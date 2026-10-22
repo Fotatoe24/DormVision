@@ -1311,6 +1311,133 @@ export async function transferTenant(formData: FormData) {
   );
 }
 
+// Permanently leaving the dorm -- transferred elsewhere, or just done
+// renting here -- as opposed to removeTenantFromRoom's "unassigned but
+// still an active tenant pending reassignment." Unlike every other
+// mutation in this file, this one deliberately does NOT touch bills,
+// payments, maintenance_requests, or room_assignments beyond closing
+// the open one: the tenants row stays, under tenant_id every one of
+// those tables already points at, so a moved-out tenant's full
+// billing/payment/maintenance history keeps showing on their detail
+// page exactly as it did before. Only status, room_id, and
+// move_out_date change.
+export async function moveOutTenant(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const tenantId = String(formData.get("tenantId") ?? "");
+
+  if (!tenantId) {
+    redirect("/admin/tenants");
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("id, room_id, full_name")
+    .eq("profile_id", tenantId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (tenantError || !tenant) {
+    redirect("/admin/tenants?error=" + encodeURIComponent("Tenant not found."));
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { error: updateError } = await supabase
+    .from("tenants")
+    .update({ room_id: null, status: "moved_out", move_out_date: today })
+    .eq("id", tenant.id);
+
+  if (updateError) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent("Could not move out tenant: " + updateError.message)
+    );
+  }
+
+  // Close the open assignment-history row, if any -- same as
+  // removeTenantFromRoom, so the room's own history reads correctly
+  // too (an assignment that never closes looks like they're still
+  // there).
+  await supabase
+    .from("room_assignments")
+    .update({ ended_at: today })
+    .eq("tenant_id", tenant.id)
+    .is("ended_at", null);
+
+  if (tenant.room_id) {
+    await syncRoomStatus(supabase, tenant.room_id, dormId);
+  }
+
+  revalidatePath("/admin/tenants");
+  revalidatePath("/admin/rooms");
+  redirect(
+    "/admin/tenants/" +
+      tenant.id +
+      "?saved=" +
+      encodeURIComponent(`${tenant.full_name} marked as moved out.`)
+  );
+}
+
+// Undoes moveOutTenant for a tenant who's coming back -- sets status
+// back to 'active' with no room (an owner assigns one afterward via
+// assignTenantToRoom, same as any other unassigned active tenant).
+// Deliberately NOT the tenant_registration_requests/
+// approveRegistrationRequest flow: that path explicitly refuses to
+// approve a request for someone who already has a tenants row in this
+// dorm (see approveRegistrationRequest's "already a tenant" guard),
+// which a moved-out tenant still does.
+export async function reactivateTenant(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+
+  const tenantId = String(formData.get("tenantId") ?? "");
+
+  if (!tenantId) {
+    redirect("/admin/tenants");
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("id, full_name")
+    .eq("profile_id", tenantId)
+    .eq("dorm_id", dormId)
+    .single();
+
+  if (tenantError || !tenant) {
+    redirect("/admin/tenants?error=" + encodeURIComponent("Tenant not found."));
+  }
+
+  const { error: updateError } = await supabase
+    .from("tenants")
+    .update({ status: "active", move_out_date: null })
+    .eq("id", tenant.id);
+
+  if (updateError) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent("Could not reactivate tenant: " + updateError.message)
+    );
+  }
+
+  revalidatePath("/admin/tenants");
+  redirect(
+    "/admin/tenants/" +
+      tenant.id +
+      "?saved=" +
+      encodeURIComponent(
+        `${tenant.full_name} reactivated. Assign them a room from Rooms.`
+      )
+  );
+}
+
 export async function deactivateRoom(formData: FormData) {
   const dormId = await requireOwnerDormId();
 

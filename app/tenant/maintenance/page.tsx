@@ -3,6 +3,8 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { submitMaintenanceRequest } from "@/lib/actions";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
+import { getTenantAccessState } from "@/lib/tenant-status";
+import { RegistrationStatus } from "@/components/registration-status";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 import {
@@ -55,6 +57,20 @@ export default async function TenantMaintenancePage({
   if (!session) redirect("/");
   if (session.profile?.role !== "tenant") redirect("/admin");
 
+  // Same access gate as Home and Billing -- a moved-out (or still
+  // pending/rejected) tenant shouldn't be able to file new maintenance
+  // requests for a room they no longer occupy.
+  const accessState = await getTenantAccessState(
+    session.user.id,
+    session.profile?.dorm_id ?? null
+  );
+
+  if (accessState.status !== "approved") {
+    return (
+      <RegistrationStatus state={accessState} error={error} saved={saved} />
+    );
+  }
+
   const supabase = createAdminClient();
 
   const { data: tenant } = await supabase
@@ -70,9 +86,7 @@ export default async function TenantMaintenancePage({
   const { data: requests, count } = tenant
     ? await supabase
         .from("maintenance_requests")
-        .select("id, title, description, status, created_at", {
-          count: "exact",
-        })
+        .select("id, title, description, status, created_at", { count: "exact" })
         .eq("tenant_id", tenant.id)
         .order("created_at", { ascending: false })
         .range(from, to)
@@ -191,9 +205,7 @@ export default async function TenantMaintenancePage({
                 </div>
 
                 <span
-                  className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${
-                    statusStyles[r.status]
-                  }`}
+                  className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusStyles[r.status]}`}
                 >
                   <StatusIcon
                     className={`h-3 w-3 ${
@@ -217,9 +229,7 @@ export default async function TenantMaintenancePage({
       <PaginationControls
         page={page}
         totalPages={totalPages}
-        hrefForPage={(p) =>
-          p > 1 ? `/tenant/maintenance?page=${p}` : "/tenant/maintenance"
-        }
+        hrefForPage={(p) => (p > 1 ? `/tenant/maintenance?page=${p}` : "/tenant/maintenance")}
       />
     </div>
   );

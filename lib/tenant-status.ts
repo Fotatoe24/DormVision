@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // just means "not an owner", not "approved".
 export type TenantAccessState =
   | { status: "approved" }
+  | { status: "moved_out"; moveOutDate: string | null }
   | { status: "pending"; requestId: string }
   | { status: "rejected"; requestId: string; reason: string | null }
   | { status: "none" };
@@ -19,11 +20,21 @@ export async function getTenantAccessState(
 
   const { data: tenant } = await admin
     .from("tenants")
-    .select("id")
+    .select("id, status, move_out_date")
     .eq("profile_id", userId)
     .maybeSingle();
 
   if (tenant) {
+    // A moved-out tenant's row is kept (billing/payment/maintenance
+    // history still points at it -- see moveOutTenant), but it no
+    // longer grants access to the tenant dashboard. 'active' and
+    // 'inactive' both still count as approved; 'inactive' isn't wired
+    // to anything yet elsewhere in the app, so this doesn't change
+    // behavior for it.
+    if (tenant.status === "moved_out") {
+      return { status: "moved_out", moveOutDate: tenant.move_out_date };
+    }
+
     return { status: "approved" };
   }
 

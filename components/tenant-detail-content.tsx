@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { removeTenantFromRoom, transferTenant } from "@/lib/actions";
+import {
+  removeTenantFromRoom,
+  transferTenant,
+  moveOutTenant,
+  reactivateTenant,
+} from "@/lib/actions";
 import {
   formatMoney,
   formatBillDate,
@@ -140,6 +145,49 @@ export async function TenantDetailContent({
           {tenantStatusLabels[tenant.status] ?? tenant.status}
         </span>
       </div>
+
+      {/* Move out / reactivate -- the one place this tenant's status
+          actually changes between "currently renting" and "no longer
+          renting here" (transferred elsewhere, or just done). Billing,
+          payment, and maintenance history below is never touched by
+          either action -- it's keyed to this same tenant row, not to
+          whether they're currently assigned a room. */}
+      {tenant.status === "moved_out" ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface-muted px-4 py-3">
+          <p className="text-xs text-foreground-muted">
+            Moved out
+            {tenant.move_out_date
+              ? ` ${formatBillDate(tenant.move_out_date)}`
+              : ""}
+            . Their billing and maintenance history is kept below.
+          </p>
+          {tenant.profile_id && (
+            <form action={reactivateTenant}>
+              <input type="hidden" name="tenantId" value={tenant.profile_id} />
+              <button
+                type="submit"
+                className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+              >
+                Reactivate
+              </button>
+            </form>
+          )}
+        </div>
+      ) : (
+        tenant.profile_id && (
+          <div className="mb-5 flex justify-end">
+            <form action={moveOutTenant}>
+              <input type="hidden" name="tenantId" value={tenant.profile_id} />
+              <button
+                type="submit"
+                className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
+              >
+                Move out
+              </button>
+            </form>
+          </div>
+        )
+      )}
 
       {error && (
         <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">

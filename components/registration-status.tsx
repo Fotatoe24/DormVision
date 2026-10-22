@@ -3,6 +3,7 @@ import {
   submitRegistrationRequest,
   logout,
 } from "@/lib/actions";
+import { formatBillDate } from "@/lib/billing";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -69,6 +70,7 @@ export function RegistrationStatus({
   saved,
 }: {
   state:
+    | { status: "moved_out"; moveOutDate: string | null }
     | { status: "pending"; requestId: string }
     | { status: "rejected"; requestId: string; reason: string | null }
     | { status: "none" };
@@ -86,6 +88,28 @@ export function RegistrationStatus({
       {saved && (
         <div className="mb-4 rounded-md border border-status-paid/30 bg-status-paid/10 px-3 py-2 text-xs text-status-paid">
           {saved}
+        </div>
+      )}
+
+      {state.status === "moved_out" && (
+        <div className="rounded-lg border border-border bg-surface p-6 text-center">
+          <p className="font-heading text-sm font-semibold text-foreground">
+            You&apos;ve moved out of this dormitory
+          </p>
+          <p className="mt-2 text-sm text-foreground-muted">
+            Your tenant account here is no longer active, so the dashboard,
+            billing, and maintenance pages are closed. Your billing and
+            payment history is kept on file with the dorm owner.
+          </p>
+          {state.moveOutDate && (
+            <span className="mt-4 inline-block rounded-full bg-status-unpaid/15 px-3 py-1 text-xs font-medium text-status-unpaid">
+              Moved out {formatBillDate(state.moveOutDate)}
+            </span>
+          )}
+          <p className="mt-4 text-xs text-foreground-muted">
+            Moving back in? Contact the dorm owner directly — they can
+            reactivate your account from their side.
+          </p>
         </div>
       )}
 
