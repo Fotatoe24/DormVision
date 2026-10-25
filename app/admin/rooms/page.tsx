@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -33,9 +34,14 @@ const statusLabels: Record<string, string> = {
 export default async function RoomsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    saved?: string;
+    q?: string;
+    status?: string;
+  }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { error, saved, q, status } = await searchParams;
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -111,10 +117,35 @@ export default async function RoomsPage({
     }
   }
 
-  const roomsWithSpace = (rooms ?? []).filter((r) => {
+  // Deliberately built from the FULL room list, not the filtered one
+  // below — the "Assign to room" dropdown must keep offering every
+  // room with space, whatever the owner is currently searching for.
+  const allRooms = rooms ?? [];
+
+  const roomsWithSpace = allRooms.filter((r) => {
     if (r.status === "maintenance" || r.status === "inactive") return false;
     const occ = tenantsByRoom.get(r.id)?.length ?? 0;
     return occ < r.capacity;
+  });
+
+  // ------------------------------------------------------------
+  // Search + status filter. Matches the room number, or the name of
+  // anyone currently living in the room (so "Maria" finds her room).
+  // Done in memory: a dorm's room list is small and occupants are
+  // already loaded above, so there's no second query to scope.
+  // ------------------------------------------------------------
+  const needle = (q ?? "").trim().toLowerCase();
+  const validStatuses = ["available", "full", "maintenance", "inactive"];
+  const statusFilter = status && validStatuses.includes(status) ? status : "";
+  const hasFilters = Boolean(needle || statusFilter);
+
+  const visibleRooms = allRooms.filter((r) => {
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (!needle) return true;
+    if (r.room_number.toLowerCase().includes(needle)) return true;
+    return (tenantsByRoom.get(r.id) ?? []).some((t) =>
+      t.full_name.toLowerCase().includes(needle)
+    );
   });
 
   return (
@@ -195,15 +226,68 @@ export default async function RoomsPage({
         </button>
       </form>
 
+      {/* Search + filter */}
+      <form className="mb-2 flex flex-wrap gap-2" action="/admin/rooms">
+        <input
+          type="search"
+          name="q"
+          defaultValue={q ?? ""}
+          placeholder="Search by room number or tenant…"
+          aria-label="Search rooms"
+          className="min-w-[160px] flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary"
+        />
+        <select
+          name="status"
+          defaultValue={statusFilter}
+          aria-label="Filter by status"
+          className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+        >
+          <option value="">All statuses</option>
+          <option value="available">Available</option>
+          <option value="full">Full</option>
+          <option value="maintenance">Under maintenance</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <button
+          type="submit"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
+        >
+          Search
+        </button>
+        {hasFilters && (
+          <Link
+            href="/admin/rooms"
+            className="flex items-center rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground-muted transition-colors hover:text-foreground"
+          >
+            Clear
+          </Link>
+        )}
+      </form>
+
+      <p className="mb-4 text-xs text-foreground-muted" aria-live="polite">
+        {hasFilters
+          ? `${visibleRooms.length} of ${allRooms.length} room(s) shown`
+          : `${allRooms.length} room(s)`}
+      </p>
+
       {/* Rooms grid */}
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {(rooms ?? []).length === 0 && (
+        {allRooms.length === 0 && (
           <p className="col-span-full rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
             No rooms yet — add your first one above.
           </p>
         )}
 
-        {(rooms ?? []).map((room) => {
+        {allRooms.length > 0 && visibleRooms.length === 0 && (
+          <div className="col-span-full rounded-lg border border-border bg-surface px-4 py-8 text-center">
+            <p className="text-sm font-medium">No rooms found</p>
+            <p className="mt-1 text-xs text-foreground-muted">
+              Try a different search or filter.
+            </p>
+          </div>
+        )}
+
+        {visibleRooms.map((room) => {
           const occupants = tenantsByRoom.get(room.id) ?? [];
           return (
             <div
