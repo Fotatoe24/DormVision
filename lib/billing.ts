@@ -11,6 +11,14 @@ export function formatMoney(n: number | string) {
     maximumFractionDigits: 2,
   })}`;
 }
+// Local-date YYYY-MM-DD. Don't use toISOString() for date-only values:
+// it converts to UTC first, which shifts the day at UTC+8.
+export function toDateString(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export function formatBillDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-PH", {

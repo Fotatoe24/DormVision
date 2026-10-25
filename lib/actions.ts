@@ -14,6 +14,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
+import { toDateString } from "@/lib/billing";
 
 // ============================================================
 // AUTHENTICATION
@@ -1071,7 +1072,7 @@ export async function assignTenantToRoom(formData: FormData) {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateString(new Date());
 
   const { data: updatedTenant, error: tenantSyncError } = await supabase
     .from("tenants")
@@ -1127,7 +1128,7 @@ export async function removeTenantFromRoom(formData: FormData) {
 
   const supabase = createAdminClient();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateString(new Date());
 
   // Unassigning a tenant from a room is not the same as deactivating
   // their account -- they stay 'active' and simply become
@@ -1259,7 +1260,7 @@ export async function transferTenant(formData: FormData) {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateString(new Date());
   const oldRoomId = tenant.room_id;
 
   const { error: updateError } = await supabase
@@ -1343,7 +1344,7 @@ export async function moveOutTenant(formData: FormData) {
     redirect("/admin/tenants?error=" + encodeURIComponent("Tenant not found."));
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateString(new Date());
 
   const { error: updateError } = await supabase
     .from("tenants")
@@ -1423,7 +1424,9 @@ export async function reactivateTenant(formData: FormData) {
       "/admin/tenants/" +
         tenant.id +
         "?error=" +
-        encodeURIComponent("Could not reactivate tenant: " + updateError.message)
+        encodeURIComponent(
+          "Could not reactivate tenant: " + updateError.message
+        )
     );
   }
 
@@ -1623,8 +1626,8 @@ export async function generateMonthlyBills() {
     return date.toISOString().slice(0, 10);
   };
 
-  const billingPeriodStart = formatDate(periodStart);
-  const billingPeriodEnd = formatDate(periodEnd);
+  const billingPeriodStart = toDateString(periodStart);
+  const billingPeriodEnd = toDateString(periodEnd);
 
   // ----------------------------------------------------------
   // Get billing settings
@@ -1739,7 +1742,7 @@ export async function generateMonthlyBills() {
         dorm_id: dormId,
         billing_period_start: billingPeriodStart,
         billing_period_end: billingPeriodEnd,
-        due_date: formatDate(dueDate),
+        due_date: toDateString(dueDate),
         rent_amount: Number(tenant.room?.monthly_rate ?? 0),
         other_charges: 0,
         amount_paid: 0,
@@ -1858,7 +1861,9 @@ export async function createBill(formData: FormData) {
 
   if (error) {
     redirect(
-      billingRedirect(formData, { error: "Could not create bill: " + error.message })
+      billingRedirect(formData, {
+        error: "Could not create bill: " + error.message,
+      })
     );
   }
 
@@ -2015,7 +2020,9 @@ export async function reportPayment(formData: FormData) {
   const method = validMethods.includes(rawMethod) ? rawMethod : "cash";
 
   if (!billId) {
-    redirect("/tenant/billing?error=" + encodeURIComponent("Bill ID is required."));
+    redirect(
+      "/tenant/billing?error=" + encodeURIComponent("Bill ID is required.")
+    );
   }
 
   const admin = createAdminClient();
@@ -2331,7 +2338,9 @@ export async function deleteBill(formData: FormData) {
 
   if (deleteError) {
     redirect(
-      billingRedirect(formData, { error: "Could not delete bill: " + deleteError.message })
+      billingRedirect(formData, {
+        error: "Could not delete bill: " + deleteError.message,
+      })
     );
   }
 
@@ -2491,7 +2500,9 @@ export async function recordUtilityPayment(formData: FormData) {
   if (amount > remaining) {
     redirect(
       billingRedirect(formData, {
-        error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(2)}.`,
+        error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(
+          2
+        )}.`,
       })
     );
   }
@@ -2510,15 +2521,17 @@ export async function recordUtilityPayment(formData: FormData) {
   // Income & Expenses totals -- real money collected for the dorm, just
   // via a utility reimbursement rather than rent. See app/admin/expenses
   // and app/admin/page.tsx's income calculation.
-  const { error: transactionError } = await supabase.from("transactions").insert({
-    type: "income",
-    category: "other_income",
-    amount,
-    description: "Utility payment",
-    recorded_by: session!.user.id,
-    occurred_at: new Date().toISOString().slice(0, 10),
-    dorm_id: dormId,
-  });
+  const { error: transactionError } = await supabase
+    .from("transactions")
+    .insert({
+      type: "income",
+      category: "other_income",
+      amount,
+      description: "Utility payment",
+      recorded_by: session!.user.id,
+      occurred_at: new Date().toISOString().slice(0, 10),
+      dorm_id: dormId,
+    });
 
   if (transactionError) {
     redirect(
@@ -2734,7 +2747,9 @@ export async function updateTransaction(formData: FormData) {
   const occurredAt = String(formData.get("occurredAt") ?? "").trim();
 
   if (!transactionId) {
-    redirect("/admin/expenses?error=" + encodeURIComponent("Missing transaction."));
+    redirect(
+      "/admin/expenses?error=" + encodeURIComponent("Missing transaction.")
+    );
   }
 
   if (!TRANSACTION_TYPES.includes(type as (typeof TRANSACTION_TYPES)[number])) {
