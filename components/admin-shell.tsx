@@ -21,6 +21,7 @@ function AccountMenu({
   direction = "down",
   open,
   onOpenChange,
+  sidebar = false,
 }: {
   ownerName?: string;
   align?: "left" | "right";
@@ -32,6 +33,10 @@ function AccountMenu({
   direction?: "down" | "up";
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // True when the trigger sits on the (blue) sidebar and needs the
+  // sidebar color tokens instead of the page ones. The dropdown panel
+  // itself stays on the normal surface colors either way.
+  sidebar?: boolean;
 }) {
   return (
     <div className="relative">
@@ -40,20 +45,34 @@ function AccountMenu({
         onClick={() => onOpenChange(!open)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-muted ${focusRing}`}
+        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+          sidebar
+            ? "text-sidebar-foreground hover:bg-sidebar-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-foreground"
+            : `hover:bg-surface-muted ${focusRing}`
+        }`}
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+            sidebar
+              ? "bg-sidebar-active text-sidebar-foreground"
+              : "bg-primary/10 text-primary"
+          }`}
+        >
           <User className="h-3.5 w-3.5" />
         </span>
         <span className="hidden min-w-0 sm:block">
-          <span className="block truncate text-xs font-medium text-foreground">
+          <span
+            className={`block truncate text-xs font-medium ${
+              sidebar ? "text-sidebar-foreground" : "text-foreground"
+            }`}
+          >
             {ownerName ?? "Owner"}
           </span>
         </span>
         <ChevronDown
-          className={`hidden h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform sm:block ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`hidden h-3.5 w-3.5 shrink-0 transition-transform sm:block ${
+            sidebar ? "text-sidebar-muted" : "text-foreground-muted"
+          } ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -142,12 +161,13 @@ export function AdminShell({
   };
 
   const sidebarFooter = (
-    <div className="border-t border-border px-3 py-3">
+    <div className="border-t border-sidebar-border px-3 py-3">
       <AccountMenu
         ownerName={ownerName}
         direction="up"
         open={accountOpen}
         onOpenChange={setAccountOpen}
+        sidebar
       />
     </div>
   );
@@ -164,10 +184,7 @@ export function AdminShell({
       <AppSidebar
         subtitle={dormName}
         groups={adminNavigation.desktopGroups}
-        badgeCounts={{
-          pendingRequests: pendingRequestsCount,
-          pendingMaintenance: 0, // You would populate this with the actual count if available
-        }}
+        badgeCounts={badgeCounts}
         footer={sidebarFooter}
       />
 

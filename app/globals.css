@@ -18,6 +18,13 @@
   --status-partial: #ec9a3b;
   --status-unpaid: #8a9aa8;
   --status-overdue: #f54f4e;
+
+  --sidebar: #3b71e8;
+  --sidebar-foreground: #ffffff;
+  --sidebar-muted: rgba(255, 255, 255, 0.82);
+  --sidebar-hover: rgba(255, 255, 255, 0.14);
+  --sidebar-active: rgba(255, 255, 255, 0.22);
+  --sidebar-border: rgba(255, 255, 255, 0.22);
 }
 
 .dark {
@@ -34,6 +41,13 @@
   --status-partial: #f0b05a;
   --status-unpaid: #a8b9c4;
   --status-overdue: #ff6f6a;
+
+  --sidebar: #0c2c46;
+  --sidebar-foreground: #eaf3f7;
+  --sidebar-muted: #9fb3c2;
+  --sidebar-hover: #123752;
+  --sidebar-active: rgba(34, 199, 180, 0.14);
+  --sidebar-border: #1c3c54;
 }
 
 @theme inline {
@@ -50,6 +64,13 @@
   --color-status-partial: var(--status-partial);
   --color-status-unpaid: var(--status-unpaid);
   --color-status-overdue: var(--status-overdue);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-border: var(--sidebar-border);
 
   --font-sans: var(--font-inter);
   --font-heading: var(--font-manrope);

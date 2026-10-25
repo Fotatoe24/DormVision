@@ -6,7 +6,7 @@ import type { NavGroup } from "@/lib/navigation";
 import { BrandMark } from "@/components/brand-mark";
 
 const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-foreground";
 
 function isItemActive(pathname: string, href: string) {
   const isRootRoute = href === "/admin" || href === "/tenant";
@@ -37,14 +37,14 @@ export function AppSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-surface sm:flex">
+    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar sm:flex">
       <div className="flex shrink-0 items-center gap-2 px-4 py-4">
         <BrandMark />
         <div className="min-w-0">
-          <p className="font-heading text-sm font-semibold text-foreground">
+          <p className="font-heading text-sm font-semibold text-sidebar-foreground">
             DormVision
           </p>
-          <p className="truncate text-xs text-foreground-muted">
+          <p className="truncate text-xs text-sidebar-muted">
             {subtitle ?? "Your dormitory"}
           </p>
         </div>
@@ -58,7 +58,7 @@ export function AppSidebar({
             className={i > 0 ? "mt-4" : undefined}
           >
             {group.label && (
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted/70">
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">
                 {group.label}
               </p>
             )}
@@ -78,8 +78,8 @@ export function AppSidebar({
                       aria-current={active ? "page" : undefined}
                       className={`flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${focusRing} ${
                         active
-                          ? "bg-primary/10 text-primary"
-                          : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
+                          ? "bg-sidebar-active text-sidebar-foreground"
+                          : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
                       }`}
                     >
                       <span className="flex items-center gap-2.5">
@@ -88,7 +88,7 @@ export function AppSidebar({
                       </span>
                       {badgeCount > 0 && (
                         <span
-                          className="rounded-full bg-status-overdue px-1.5 py-0.5 text-[10px] font-semibold leading-none text-surface"
+                          className="rounded-full bg-status-overdue px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
                           aria-label={`${badgeCount} pending`}
                         >
                           {badgeCount}
