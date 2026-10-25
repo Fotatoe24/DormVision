@@ -76,3 +76,13 @@ export async function getMyPendingMaintenanceRequestsCount(
 
   return count ?? 0;
 }
+
+export async function getGraceDays(dormId: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("dorm_settings")
+    .select("grace_period_days")
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+  return data?.grace_period_days ?? 0;
+}

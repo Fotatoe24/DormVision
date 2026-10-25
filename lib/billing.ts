@@ -42,9 +42,13 @@ export function formatPaymentDate(iso: string) {
 // A bill is treated as overdue in the UI whenever it's past its due date
 // and not fully paid — this is derived at render time rather than stored,
 // since there's no background job to flip a persisted status on a schedule.
-export function displayBillStatus(bill: { status: string; due_date: string }) {
-  const isPastDue = new Date(bill.due_date + "T00:00:00") < new Date();
-  if (bill.status !== "paid" && isPastDue) return "overdue";
+export function displayBillStatus(
+  bill: { status: string; due_date: string },
+  graceDays = 0
+) {
+  const cutoff = new Date(bill.due_date + "T00:00:00");
+  cutoff.setDate(cutoff.getDate() + graceDays);
+  if (bill.status !== "paid" && cutoff < new Date()) return "overdue";
   return bill.status;
 }
 
