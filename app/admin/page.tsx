@@ -384,7 +384,7 @@ export default async function AdminPage() {
         <div className="rounded-lg border border-border bg-surface p-4">
           <div className="mb-2 flex items-center gap-2 text-foreground-muted">
             <Receipt className="h-4 w-4" />
-            <p className="text-xs">Pending payments</p>
+            <p className="text-xs">Pending Rent Payments</p>
           </div>
           <p
             className={`font-mono text-xl font-semibold ${
