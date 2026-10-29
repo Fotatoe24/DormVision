@@ -1,3 +1,5 @@
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
+import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -213,22 +215,21 @@ export default async function PaymentsPage({
 
                     <form action={confirmPendingPayment}>
                       <input type="hidden" name="paymentId" value={p.id} />
-                      <button
-                        type="submit"
-                        className="rounded-md bg-status-paid px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
-                      >
+                      <SubmitButton className="rounded-md bg-status-paid px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90">
                         Confirm
-                      </button>
+                      </SubmitButton>
                     </form>
 
                     <form action={rejectPendingPayment}>
                       <input type="hidden" name="paymentId" value={p.id} />
-                      <button
-                        type="submit"
+                      <ConfirmSubmitButton
                         className="rounded-md border border-status-overdue/30 px-3 py-1.5 text-xs text-status-overdue hover:bg-status-overdue/10"
+                        title="Reject this payment report?"
+                        description="It won't be applied to the bill, and the tenant will need to report it again."
+                        confirmLabel="Reject payment"
                       >
                         Reject
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>

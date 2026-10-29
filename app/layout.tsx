@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { DEFAULT_PALETTE, PALETTES, PALETTE_STORAGE_KEY } from "@/lib/palettes";
 import "./globals.css";
 import { Toaster } from "sonner";
 
@@ -46,6 +47,21 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Applies the saved color-scheme palette before first paint so
+            there's no flash of the default colors. See lib/palettes.ts. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var p=localStorage.getItem(${JSON.stringify(
+              PALETTE_STORAGE_KEY
+            )});if(p&&${JSON.stringify(
+              PALETTES.map((x) => x.id)
+            )}.indexOf(p)>-1&&p!==${JSON.stringify(
+              DEFAULT_PALETTE
+            )})document.documentElement.dataset.palette=p}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}

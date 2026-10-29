@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Building2, CreditCard, Users, Bell, Wrench, Save } from "lucide-react";
+import { CreditCard, Users, Bell, Wrench, Save } from "lucide-react";
 
 type Settings = {
   id: string;

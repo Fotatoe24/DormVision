@@ -51,7 +51,7 @@ export async function PATCH(request: Request) {
     // -----------------------------------------------------
     // Get current avatar URL
     // -----------------------------------------------------
-    const { data: currentUser, error: currentUserError } = await admin
+    const { error: currentUserError } = await admin
       .from("users")
       .select("avatar_url")
       .eq("id", session.user.id)

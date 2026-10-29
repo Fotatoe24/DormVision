@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -167,12 +168,9 @@ export default async function TenantRequestsPage({
                       {r.full_name} will become an active tenant. No room
                       will be assigned automatically.
                     </p>
-                    <button
-                      type="submit"
-                      className="w-full rounded-md bg-primary py-1.5 text-xs font-medium text-surface hover:opacity-90"
-                    >
+                    <SubmitButton className="w-full rounded-md bg-primary py-1.5 text-xs font-medium text-surface hover:opacity-90">
                       Confirm approval
-                    </button>
+                    </SubmitButton>
                   </form>
                 </details>
 
@@ -200,12 +198,9 @@ export default async function TenantRequestsPage({
                       rows={2}
                       className={`${inputClass} mb-2`}
                     />
-                    <button
-                      type="submit"
-                      className="w-full rounded-md border border-status-overdue/30 py-1.5 text-xs text-status-overdue hover:bg-status-overdue/10"
-                    >
+                    <SubmitButton className="w-full rounded-md border border-status-overdue/30 py-1.5 text-xs text-status-overdue hover:bg-status-overdue/10">
                       Confirm rejection
-                    </button>
+                    </SubmitButton>
                   </form>
                 </details>
               </div>

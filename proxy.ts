@@ -3,12 +3,12 @@ import { verifySessionToken, AUTH_COOKIE_NAME } from "@/lib/jwt";
 
 // Protect the /admin, /tenant, and /profile route groups — redirect
 // anyone without a valid session token to the login screen at the app
-// root. jose (not the Supabase SSR helpers this used to delegate to) is
-// what makes this safe to run here: middleware runs on the Edge runtime,
-// and jose is Edge-safe where bcryptjs-dependent code is not.
+// root. This is Next 16's `proxy` convention (formerly `middleware`),
+// which runs on the Node.js runtime; session verification goes through
+// the lightweight jose-only helpers in lib/jwt.ts.
 const protectedPrefixes = ["/admin", "/tenant", "/profile"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const isProtected = protectedPrefixes.some((prefix) =>
     request.nextUrl.pathname.startsWith(prefix)
   );

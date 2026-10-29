@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useDismissableOverlay } from "@/components/use-dismissable-overlay";
+import { SubmitButton } from "@/components/submit-button";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -211,12 +212,12 @@ export function TransactionModal({
                 />
               </div>
 
-              <button
-                type="submit"
+              <SubmitButton
+                pendingText="Saving…"
                 className="w-full rounded-md bg-primary py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
               >
                 {values.id ? "Save changes" : "Add transaction"}
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>

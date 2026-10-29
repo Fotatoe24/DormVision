@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -161,12 +162,9 @@ export default async function TenantMaintenancePage({
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="mt-3 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-surface transition-opacity hover:opacity-90"
-          >
+          <SubmitButton className="mt-3 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-surface transition-opacity hover:opacity-90">
             Submit request
-          </button>
+          </SubmitButton>
         </form>
       ) : (
         <div className="mb-5 rounded-lg border border-border bg-surface px-4 py-3 text-xs text-foreground-muted">

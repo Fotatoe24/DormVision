@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -289,12 +290,9 @@ export default async function BillingPage({
           </div>
 
           <form action={generateMonthlyBills}>
-            <button
-              type="submit"
-              className="whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
-            >
+            <SubmitButton className="whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90">
               Generate
-            </button>
+            </SubmitButton>
           </form>
         </div>
 

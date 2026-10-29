@@ -1,8 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 
-// Split out from lib/auth.ts deliberately: this file must stay
-// Edge-runtime-safe (middleware.ts imports it directly), so it only
-// touches `jose` — never bcryptjs or anything Node-specific.
+// Split out from lib/auth.ts deliberately: proxy.ts imports this file
+// directly, so it stays lightweight and only touches `jose` — never
+// bcryptjs or the rest of the auth module.
 
 const secret = process.env.JWT_SECRET;
 

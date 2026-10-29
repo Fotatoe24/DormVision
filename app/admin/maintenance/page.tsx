@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateMaintenanceRequestStatus } from "@/lib/actions";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { PaginationControls } from "@/components/pagination-controls";
+import { SubmitButton } from "@/components/submit-button";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const statusStyles: Record<string, string> = {
@@ -174,12 +174,9 @@ export default async function MaintenancePage({
                         name="status"
                         value={action.status}
                       />
-                      <button
-                        type="submit"
-                        className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
-                      >
+                      <SubmitButton className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground">
                         {action.label}
-                      </button>
+                      </SubmitButton>
                     </form>
                   ))}
                 </div>

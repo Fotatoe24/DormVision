@@ -1,5 +1,7 @@
 "use client";
 
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
+import { SubmitButton } from "@/components/submit-button";
 import { useState } from "react";
 import Link from "next/link";
 import { X, FileText } from "lucide-react";
@@ -250,13 +252,10 @@ export function RoomBillingModal({
                                           roomId={roomId}
                                           redirectState={redirectState}
                                         />
-                                        <button
-                                          type="submit"
-                                          className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90"
-                                        >
+                                        <SubmitButton className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90">
                                           Mark as Paid —{" "}
                                           {formatMoney(remaining)}
-                                        </button>
+                                        </SubmitButton>
                                       </form>
 
                                       <form
@@ -281,12 +280,9 @@ export function RoomBillingModal({
                                           placeholder="Amount"
                                           className="w-24 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary"
                                         />
-                                        <button
-                                          type="submit"
-                                          className="rounded-md border border-border px-2.5 py-1 text-foreground-muted hover:bg-surface-muted hover:text-foreground"
-                                        >
+                                        <SubmitButton className="rounded-md border border-border px-2.5 py-1 text-foreground-muted hover:bg-surface-muted hover:text-foreground">
                                           Record
-                                        </button>
+                                        </SubmitButton>
                                       </form>
                                     </div>
                                   )}
@@ -302,12 +298,14 @@ export function RoomBillingModal({
                                         roomId={roomId}
                                         redirectState={redirectState}
                                       />
-                                      <button
-                                        type="submit"
+                                      <ConfirmSubmitButton
                                         className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-status-overdue hover:bg-status-overdue/10"
+                                        title="Delete this bill?"
+                                        description="This unpaid bill will be permanently deleted. This can't be undone."
+                                        confirmLabel="Delete bill"
                                       >
                                         Delete
-                                      </button>
+                                      </ConfirmSubmitButton>
                                     </form>
                                   )}
                                 </div>
@@ -408,12 +406,9 @@ export function RoomBillingModal({
                       </div>
                     </div>
 
-                    <button
-                      type="submit"
-                      className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-surface hover:opacity-90"
-                    >
+                    <SubmitButton className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-surface hover:opacity-90">
                       Add bill
-                    </button>
+                    </SubmitButton>
                   </form>
                 </details>
               </div>
@@ -504,12 +499,9 @@ export function RoomBillingModal({
                                   roomId={roomId}
                                   redirectState={redirectState}
                                 />
-                                <button
-                                  type="submit"
-                                  className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90"
-                                >
+                                <SubmitButton className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90">
                                   Mark as Paid — {formatMoney(remaining)}
-                                </button>
+                                </SubmitButton>
                               </form>
 
                               <form
@@ -534,12 +526,9 @@ export function RoomBillingModal({
                                   placeholder="Amount"
                                   className="w-24 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary"
                                 />
-                                <button
-                                  type="submit"
-                                  className="rounded-md border border-border px-2.5 py-1 text-foreground-muted hover:bg-surface-muted hover:text-foreground"
-                                >
+                                <SubmitButton className="rounded-md border border-border px-2.5 py-1 text-foreground-muted hover:bg-surface-muted hover:text-foreground">
                                   Record
-                                </button>
+                                </SubmitButton>
                               </form>
                             </div>
                           )}
@@ -555,12 +544,14 @@ export function RoomBillingModal({
                                 roomId={roomId}
                                 redirectState={redirectState}
                               />
-                              <button
-                                type="submit"
+                              <ConfirmSubmitButton
                                 className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-status-overdue hover:bg-status-overdue/10"
+                                title="Delete this utility bill?"
+                                description="This unpaid utility bill will be permanently deleted. This can't be undone."
+                                confirmLabel="Delete bill"
                               >
                                 Delete
-                              </button>
+                              </ConfirmSubmitButton>
                             </form>
                           )}
                         </div>
@@ -646,12 +637,9 @@ export function RoomBillingModal({
                       />
                     </div>
 
-                    <button
-                      type="submit"
-                      className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-surface hover:opacity-90"
-                    >
+                    <SubmitButton className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-surface hover:opacity-90">
                       Add utility bill
-                    </button>
+                    </SubmitButton>
                   </form>
                 </details>
               </div>

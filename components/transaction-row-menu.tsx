@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { TransactionModal, type TransactionFormValues } from "@/components/transaction-modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
@@ -22,6 +23,8 @@ export function TransactionRowMenu({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteFormRef = useRef<HTMLFormElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,19 +80,39 @@ export function TransactionRowMenu({
             Edit
           </button>
 
-          <form action={deleteAction} onSubmit={() => setMenuOpen(false)}>
-            <input type="hidden" name="transactionId" value={values.id} />
-            <button
-              type="submit"
-              role="menuitem"
-              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-status-overdue hover:bg-status-overdue/10 ${focusRing}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete
-            </button>
-          </form>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setDeleteOpen(true);
+            }}
+            className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-status-overdue hover:bg-status-overdue/10 ${focusRing}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
         </div>
       )}
+
+      {/* Mounted outside the dropdown (like the edit modal below) so
+          closing the menu doesn't unmount the form before it submits. */}
+      <form ref={deleteFormRef} action={deleteAction} className="hidden">
+        <input type="hidden" name="transactionId" value={values.id} />
+      </form>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        tone="danger"
+        title="Delete this entry?"
+        description="It will be permanently removed from your income and expense records. This can't be undone."
+        confirmLabel="Delete entry"
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => {
+          setDeleteOpen(false);
+          deleteFormRef.current?.requestSubmit();
+        }}
+      />
 
       {/* Rendered unconditionally (not inside {menuOpen && ...}) so
           closing the dropdown above doesn't unmount this before it

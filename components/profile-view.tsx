@@ -1,10 +1,12 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/password-input";
+import { AppearanceSettings } from "@/components/appearance-settings";
 import { logout } from "@/lib/actions";
 import { ArrowLeft } from "lucide-react";
 
@@ -443,6 +445,9 @@ export function ProfileView({ user }: { user: ProfileUser }) {
         </button>
       </div>
 
+      {/* Appearance */}
+      <AppearanceSettings />
+
       {/* Contact details */}
       {user.role === "tenant" && (
         <div className="mb-5 space-y-4 rounded-lg border border-border bg-surface p-5">
@@ -574,12 +579,9 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
       {/* Sign out */}
       <form action={logout} className="mt-5">
-        <button
-          type="submit"
-          className="w-full rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground"
-        >
+        <SubmitButton className="w-full rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground">
           Sign out
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

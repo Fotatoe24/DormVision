@@ -1,3 +1,5 @@
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -164,12 +166,9 @@ export async function TenantDetailContent({
           {tenant.profile_id && (
             <form action={reactivateTenant}>
               <input type="hidden" name="tenantId" value={tenant.profile_id} />
-              <button
-                type="submit"
-                className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
-              >
+              <SubmitButton className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground">
                 Reactivate
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -178,12 +177,14 @@ export async function TenantDetailContent({
           <div className="mb-5 flex justify-end">
             <form action={moveOutTenant}>
               <input type="hidden" name="tenantId" value={tenant.profile_id} />
-              <button
-                type="submit"
+              <ConfirmSubmitButton
                 className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
+                title="Move this tenant out?"
+                description={`${tenant.full_name} will be marked as moved out and unassigned from their room. Their billing, payment and maintenance history is kept.`}
+                confirmLabel="Move out"
               >
                 Move out
-              </button>
+              </ConfirmSubmitButton>
             </form>
           </div>
         )
@@ -262,12 +263,14 @@ export async function TenantDetailContent({
                       value={tenant.profile_id}
                     />
                     <input type="hidden" name="roomId" value={room.id} />
-                    <button
-                      type="submit"
+                    <ConfirmSubmitButton
                       className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
+                      title="Remove tenant from this room?"
+                      description={`${tenant.full_name} stays an active tenant but will no longer be assigned to this room.`}
+                      confirmLabel="Remove"
                     >
                       Remove from room
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )}
               </div>
@@ -298,12 +301,9 @@ export async function TenantDetailContent({
                     </option>
                   ))}
                 </select>
-                <button
-                  type="submit"
-                  className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground-muted hover:text-foreground"
-                >
+                <SubmitButton className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground-muted hover:text-foreground">
                   Transfer
-                </button>
+                </SubmitButton>
               </form>
             )}
           </div>

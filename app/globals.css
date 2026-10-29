@@ -83,3 +83,108 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+/* ============================================================
+   Color-scheme palettes (Profile → Appearance)
+   Selected by <html data-palette="…">; "teal" is the default and has
+   no overrides. Each palette overrides the brand + surface tokens for
+   light mode, then again for dark mode (the `html.dark[…]` selector is
+   more specific, so it wins over the light block when both apply).
+   Status colors are left alone on purpose — paid/overdue must read the
+   same in every scheme.
+   ============================================================ */
+
+html[data-palette="ocean"] {
+  --primary: #2563eb;
+  --accent: #1e3a8a;
+  --sidebar: #0f2a5c;
+}
+html.dark[data-palette="ocean"] {
+  --background: #0a1226;
+  --surface: #111c3a;
+  --surface-muted: #182650;
+  --border: #23336a;
+  --primary: #60a5fa;
+  --accent: #93c5fd;
+  --sidebar: #111c3a;
+  --sidebar-hover: #182650;
+  --sidebar-active: rgba(96, 165, 250, 0.16);
+  --sidebar-border: #23336a;
+}
+
+html[data-palette="violet"] {
+  --primary: #7c3aed;
+  --accent: #4c1d95;
+  --sidebar: #2e1065;
+}
+html.dark[data-palette="violet"] {
+  --background: #120a24;
+  --surface: #1c1238;
+  --surface-muted: #281a4d;
+  --border: #35255f;
+  --primary: #a78bfa;
+  --accent: #c4b5fd;
+  --sidebar: #1c1238;
+  --sidebar-hover: #281a4d;
+  --sidebar-active: rgba(167, 139, 250, 0.16);
+  --sidebar-border: #35255f;
+}
+
+html[data-palette="rose"] {
+  --primary: #e11d48;
+  --accent: #881337;
+  --sidebar: #4c0519;
+}
+html.dark[data-palette="rose"] {
+  --background: #1a0a10;
+  --surface: #2a1119;
+  --surface-muted: #3a1824;
+  --border: #4d2230;
+  --primary: #fb7185;
+  --accent: #fda4af;
+  --sidebar: #2a1119;
+  --sidebar-hover: #3a1824;
+  --sidebar-active: rgba(251, 113, 133, 0.16);
+  --sidebar-border: #4d2230;
+}
+
+html[data-palette="brass"] {
+  --primary: #b45309;
+  --accent: #78350f;
+  --sidebar: #3b2410;
+}
+html.dark[data-palette="brass"] {
+  --background: #1a1208;
+  --surface: #2a1e0e;
+  --surface-muted: #3a2a14;
+  --border: #4d3a1c;
+  --primary: #f59e0b;
+  --accent: #fcd34d;
+  --sidebar: #2a1e0e;
+  --sidebar-hover: #3a2a14;
+  --sidebar-active: rgba(245, 158, 11, 0.16);
+  --sidebar-border: #4d3a1c;
+}
+
+html[data-palette="forest"] {
+  --primary: #15803d;
+  --accent: #14532d;
+  --sidebar: #052e16;
+}
+html.dark[data-palette="forest"] {
+  --background: #07160d;
+  --surface: #0e2417;
+  --surface-muted: #143222;
+  --border: #1d4230;
+  --primary: #4ade80;
+  --accent: #86efac;
+  --sidebar: #0e2417;
+  --sidebar-hover: #143222;
+  --sidebar-active: rgba(74, 222, 128, 0.16);
+  --sidebar-border: #1d4230;
+}
+
+/* Smooth the swap when a palette or mode changes. */
+html {
+  transition: background-color 0.2s ease;
+}

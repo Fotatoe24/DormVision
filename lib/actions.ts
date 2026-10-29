@@ -1622,10 +1622,6 @@ export async function generateMonthlyBills() {
   const periodStart = new Date(year, month, 1);
   const periodEnd = new Date(year, month + 1, 0);
 
-  const formatDate = (date: Date) => {
-    return date.toISOString().slice(0, 10);
-  };
-
   const billingPeriodStart = toDateString(periodStart);
   const billingPeriodEnd = toDateString(periodEnd);
 

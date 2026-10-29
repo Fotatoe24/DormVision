@@ -1,3 +1,5 @@
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -218,12 +220,9 @@ export default async function RoomsPage({
             />
           </div>
         </div>
-        <button
-          type="submit"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
-        >
+        <SubmitButton className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90">
           Add room
-        </button>
+        </SubmitButton>
       </form>
 
       {/* Search + filter */}
@@ -327,12 +326,14 @@ export default async function RoomsPage({
                       <form action={removeTenantFromRoom}>
                         <input type="hidden" name="tenantId" value={t.id} />
                         <input type="hidden" name="roomId" value={room.id} />
-                        <button
-                          type="submit"
+                        <ConfirmSubmitButton
                           className="text-xs text-foreground-muted hover:text-status-overdue"
+                          title="Remove tenant from this room?"
+                          description={`${t.full_name} stays an active tenant but will no longer be assigned to this room.`}
+                          confirmLabel="Remove"
                         >
                           Remove
-                        </button>
+                        </ConfirmSubmitButton>
                       </form>
                     </div>
                   ))}
@@ -412,12 +413,9 @@ export default async function RoomsPage({
                       Capacity can&apos;t be reduced below that.
                     </p>
                   )}
-                  <button
-                    type="submit"
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
-                  >
+                  <SubmitButton className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90">
                     Save changes
-                  </button>
+                  </SubmitButton>
                 </form>
               </details>
 
@@ -425,12 +423,9 @@ export default async function RoomsPage({
                 {room.status === "inactive" ? (
                   <form action={reactivateRoom}>
                     <input type="hidden" name="roomId" value={room.id} />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
-                    >
+                    <SubmitButton className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground">
                       Reactivate room
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : (
                   <form action={updateRoomStatus}>
@@ -444,38 +439,34 @@ export default async function RoomsPage({
                           : "maintenance"
                       }
                     />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
-                    >
+                    <SubmitButton className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground">
                       {room.status === "maintenance"
                         ? "Mark available"
                         : "Mark under maintenance"}
-                    </button>
+                    </SubmitButton>
                   </form>
                 )}
 
                 {occupants.length === 0 && room.status !== "inactive" && (
                   <form action={deactivateRoom}>
                     <input type="hidden" name="roomId" value={room.id} />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
-                    >
+                    <SubmitButton className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground">
                       Deactivate room
-                    </button>
+                    </SubmitButton>
                   </form>
                 )}
 
                 {occupants.length === 0 && (
                   <form action={deleteRoom}>
                     <input type="hidden" name="roomId" value={room.id} />
-                    <button
-                      type="submit"
+                    <ConfirmSubmitButton
                       className="rounded-md border border-status-overdue/30 px-2.5 py-1 text-xs text-status-overdue hover:bg-status-overdue/10"
+                      title="Delete this room?"
+                      description={`Room ${room.room_number} will be permanently deleted. This can't be undone.`}
+                      confirmLabel="Delete room"
                     >
                       Delete room
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )}
               </div>
@@ -517,12 +508,9 @@ export default async function RoomsPage({
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="submit"
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
-                  >
+                  <SubmitButton className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90">
                     Assign
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             ))}

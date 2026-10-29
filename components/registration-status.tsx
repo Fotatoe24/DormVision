@@ -1,3 +1,5 @@
+import { ConfirmSubmitButton } from "@/components/confirm-dialog";
+import { SubmitButton } from "@/components/submit-button";
 import {
   cancelRegistrationRequest,
   submitRegistrationRequest,
@@ -54,12 +56,9 @@ function ResubmitForm() {
           className={inputClass}
         />
       </div>
-      <button
-        type="submit"
-        className="w-full rounded-md bg-primary py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90"
-      >
+      <SubmitButton className="w-full rounded-md bg-primary py-2 text-sm font-medium text-surface transition-opacity hover:opacity-90">
         Submit registration
-      </button>
+      </SubmitButton>
     </form>
   );
 }
@@ -127,12 +126,14 @@ export function RegistrationStatus({
           </span>
           <form action={cancelRegistrationRequest} className="mt-5">
             <input type="hidden" name="requestId" value={state.requestId} />
-            <button
-              type="submit"
+            <ConfirmSubmitButton
               className="text-xs text-foreground-muted underline hover:text-status-overdue"
+              title="Cancel your request?"
+              description="Your pending registration request will be withdrawn. You can apply again later."
+              confirmLabel="Cancel request"
             >
               Cancel this request
-            </button>
+            </ConfirmSubmitButton>
           </form>
         </div>
       )}
@@ -175,12 +176,9 @@ export function RegistrationStatus({
       )}
 
       <form action={logout} className="mt-5">
-        <button
-          type="submit"
-          className="w-full rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground"
-        >
+        <SubmitButton className="w-full rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground">
           Sign out
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

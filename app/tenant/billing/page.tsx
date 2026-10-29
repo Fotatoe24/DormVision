@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -309,12 +310,9 @@ export default async function TenantBillingPage({
                                 </option>
                               ))}
                             </select>
-                            <button
-                              type="submit"
-                              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
-                            >
+                            <SubmitButton className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90">
                               I&apos;ve Paid
-                            </button>
+                            </SubmitButton>
                           </form>
                         )}
                       </div>
