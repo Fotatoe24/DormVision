@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
+import { saveAppearance } from "@/lib/palette-store";
 
 const emptySubscribe = () => () => {};
 
@@ -33,7 +34,13 @@ export function ThemeMenuItem() {
     <button
       type="button"
       role="menuitem"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      onClick={() => {
+        const next = isDark ? "light" : "dark";
+        setTheme(next);
+        // Keep the account in step with the quick toggle, so the next
+        // sign-in elsewhere doesn't restore an older saved mode.
+        void saveAppearance({ themeMode: next });
+      }}
       className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-muted hover:text-foreground ${focusRing}`}
     >
       <span className="flex items-center gap-2">

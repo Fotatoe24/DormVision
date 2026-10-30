@@ -188,3 +188,22 @@ html.dark[data-palette="forest"] {
 html {
   transition: background-color 0.2s ease;
 }
+
+
+/* ============================================================
+   Accessibility / polish
+   ============================================================ */
+
+/* Baseline keyboard-focus ring for anything that doesn't define its own.
+   :where() keeps specificity at zero, so components that set their own
+   focus-visible ring or `focus-visible:outline-none` still win. */
+:where(a, button, summary, input, select, textarea, [role="button"], [role="menuitem"], [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Amounts use font-mono: make digits equal width so columns of money
+   line up regardless of which font ends up behind the class. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}

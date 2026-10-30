@@ -206,14 +206,14 @@ export default function SettingsForm({ dorm, settings }: Props) {
         <div className="mt-5 space-y-2 border-t border-border pt-4">
           <Toggle
             label="Payment reminders"
-            description="Notify tenants about upcoming payments."
+            description="Show tenants a reminder on their dashboard when a payment is coming up."
             checked={paymentReminders}
             onChange={setPaymentReminders}
           />
 
           <Toggle
             label="Overdue notifications"
-            description="Notify tenants when their balance becomes overdue."
+            description="Show tenants an alert on their dashboard when their balance is overdue."
             checked={overdueNotifications}
             onChange={setOverdueNotifications}
           />
@@ -262,7 +262,7 @@ export default function SettingsForm({ dorm, settings }: Props) {
 
           <Toggle
             label="New tenant notifications"
-            description="Notify the owner when a new tenant joins."
+            description="Show a badge on Tenant Requests when a new tenant applies."
             checked={newTenantNotifications}
             onChange={setNewTenantNotifications}
           />
@@ -281,14 +281,14 @@ export default function SettingsForm({ dorm, settings }: Props) {
               Notifications
             </h2>
             <p className="text-xs text-foreground-muted">
-              Control automatic dormitory notifications.
+              Choose which in-app alerts and badges appear. No emails or texts are sent.
             </p>
           </div>
         </div>
 
         <Toggle
           label="Maintenance notifications"
-          description="Notify the owner when a tenant submits a maintenance request."
+          description="Show a badge on Maintenance when a tenant submits a request."
           checked={maintenanceNotifications}
           onChange={setMaintenanceNotifications}
         />

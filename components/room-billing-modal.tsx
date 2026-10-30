@@ -252,10 +252,16 @@ export function RoomBillingModal({
                                           roomId={roomId}
                                           redirectState={redirectState}
                                         />
-                                        <SubmitButton className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90">
+                                        <ConfirmSubmitButton
+                                          tone="default"
+                                          title="Mark this bill as paid?"
+                                          description={`This records a payment of ${formatMoney(remaining)} and settles the remaining balance on this bill.`}
+                                          confirmLabel="Mark as paid"
+                                          className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90"
+                                        >
                                           Mark as Paid —{" "}
                                           {formatMoney(remaining)}
-                                        </SubmitButton>
+                                        </ConfirmSubmitButton>
                                       </form>
 
                                       <form
@@ -499,9 +505,15 @@ export function RoomBillingModal({
                                   roomId={roomId}
                                   redirectState={redirectState}
                                 />
-                                <SubmitButton className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90">
+                                <ConfirmSubmitButton
+                                  tone="default"
+                                  title="Mark this utility bill as paid?"
+                                  description={`This records a payment of ${formatMoney(remaining)} and settles the remaining balance on this utility bill.`}
+                                  confirmLabel="Mark as paid"
+                                  className="rounded-md bg-status-paid px-2.5 py-1 font-medium text-surface hover:opacity-90"
+                                >
                                   Mark as Paid — {formatMoney(remaining)}
-                                </SubmitButton>
+                                </ConfirmSubmitButton>
                               </form>
 
                               <form

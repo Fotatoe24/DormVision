@@ -3,58 +3,20 @@
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { toast } from "sonner";
+import { DEFAULT_PALETTE, PALETTES, type PaletteId } from "@/lib/palettes";
 import {
-  DEFAULT_PALETTE,
-  PALETTES,
-  PALETTE_CHANGE_EVENT,
-  PALETTE_STORAGE_KEY,
-  isPaletteId,
-  type PaletteId,
-} from "@/lib/palettes";
+  applyPalette,
+  getPalette,
+  saveAppearance,
+  subscribePalette,
+  type ThemeMode,
+} from "@/lib/palette-store";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface";
 
 const emptySubscribe = () => () => {};
-
-// The palette's source of truth is the `data-palette` attribute on <html>
-// (set before hydration by the script in app/layout.tsx), so the picker
-// reads it from there instead of mirroring it into React state.
-function subscribePalette(onChange: () => void) {
-  window.addEventListener(PALETTE_CHANGE_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(PALETTE_CHANGE_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
-function getPalette(): PaletteId {
-  const value = document.documentElement.dataset.palette;
-  return isPaletteId(value) ? value : DEFAULT_PALETTE;
-}
-
-function applyPalette(id: PaletteId) {
-  const root = document.documentElement;
-  if (id === DEFAULT_PALETTE) {
-    delete root.dataset.palette;
-  } else {
-    root.dataset.palette = id;
-  }
-
-  try {
-    if (id === DEFAULT_PALETTE) {
-      localStorage.removeItem(PALETTE_STORAGE_KEY);
-    } else {
-      localStorage.setItem(PALETTE_STORAGE_KEY, id);
-    }
-  } catch {
-    // Private mode / blocked storage: the choice still applies for this
-    // visit, it just won't be remembered.
-  }
-
-  window.dispatchEvent(new Event(PALETTE_CHANGE_EVENT));
-}
 
 const MODES = [
   { key: "light", label: "Light", icon: Sun },
@@ -133,12 +95,36 @@ export function AppearanceSettings() {
   const isDark = resolvedTheme === "dark";
   const activePalette = PALETTES.find((p) => p.id === palette) ?? PALETTES[0];
 
+  // Apply immediately on this device, then sync to the account in the
+  // background. If the account save fails, the choice still holds here.
+  async function syncToAccount(prefs: {
+    themeMode?: ThemeMode;
+    colorScheme?: PaletteId;
+  }) {
+    const ok = await saveAppearance(prefs);
+    if (!ok) {
+      toast.error(
+        "Saved on this device, but couldn't sync it to your account."
+      );
+    }
+  }
+
+  function chooseMode(mode: ThemeMode) {
+    setTheme(mode);
+    void syncToAccount({ themeMode: mode });
+  }
+
+  function choosePalette(id: PaletteId) {
+    applyPalette(id);
+    void syncToAccount({ colorScheme: id });
+  }
+
   return (
     <div className="mb-5 space-y-5 rounded-lg border border-border bg-surface p-5">
       <div>
         <p className="font-heading text-sm font-semibold">Appearance</p>
         <p className="mt-0.5 text-xs text-foreground-muted">
-          Choose how DormVision looks to you. Saved on this device.
+          Choose how DormVision looks to you. Saved to your account, so it follows you to other devices.
         </p>
       </div>
 
@@ -161,7 +147,7 @@ export function AppearanceSettings() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => setTheme(key)}
+                onClick={() => chooseMode(key)}
                 className={`group rounded-lg border-2 p-1.5 text-left transition ${focusRing} ${
                   selected
                     ? "border-primary bg-surface-muted"
@@ -218,7 +204,7 @@ export function AppearanceSettings() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => applyPalette(p.id)}
+                onClick={() => choosePalette(p.id)}
                 className={`flex items-center gap-3 rounded-lg border-2 p-2.5 text-left transition ${focusRing} ${
                   selected
                     ? "border-primary bg-surface-muted"
@@ -252,7 +238,7 @@ export function AppearanceSettings() {
       {palette !== DEFAULT_PALETTE && (
         <button
           type="button"
-          onClick={() => applyPalette(DEFAULT_PALETTE)}
+          onClick={() => choosePalette(DEFAULT_PALETTE)}
           className="text-xs font-medium text-foreground-muted underline-offset-2 hover:text-foreground hover:underline"
         >
           Reset to default scheme

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { AdminShell } from "@/components/admin-shell";
 import { TenantShell } from "@/components/tenant-shell";
+import { AppearanceSync } from "@/components/appearance-sync";
+import { getSavedAppearance } from "@/lib/appearance";
 import { getDormName, getPendingRequestsCount } from "@/lib/shell-data";
 
 // /profile is shared by both roles but previously had no layout at
@@ -20,6 +22,7 @@ export default async function ProfileLayout({
   if (!session) redirect("/");
 
   const isOwner = session.profile?.role === "owner";
+  const appearance = await getSavedAppearance(session.user.id);
 
   if (isOwner) {
     const [dormName, pendingRequestsCount] = await Promise.all([
@@ -28,21 +31,27 @@ export default async function ProfileLayout({
     ]);
 
     return (
-      <AdminShell
-        dormName={dormName}
-        ownerName={session.profile?.full_name}
-        pendingRequestsCount={pendingRequestsCount}
-      >
-        {children}
-      </AdminShell>
+      <>
+        <AppearanceSync userId={session.user.id} {...appearance} />
+        <AdminShell
+          dormName={dormName}
+          ownerName={session.profile?.full_name}
+          pendingRequestsCount={pendingRequestsCount}
+        >
+          {children}
+        </AdminShell>
+      </>
     );
   }
 
   const dormName = await getDormName(session.profile?.dorm_id);
 
   return (
-    <TenantShell dormName={dormName} tenantName={session.profile?.full_name}>
-      {children}
-    </TenantShell>
+    <>
+      <AppearanceSync userId={session.user.id} {...appearance} />
+      <TenantShell dormName={dormName} tenantName={session.profile?.full_name}>
+        {children}
+      </TenantShell>
+    </>
   );
 }

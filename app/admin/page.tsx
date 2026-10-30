@@ -8,6 +8,10 @@ import {
   formatPaymentDate,
 } from "@/lib/billing";
 import { CopyButton } from "@/components/copy-button";
+import {
+  getPendingMaintenanceRequestsCount,
+  getPendingRequestsCount,
+} from "@/lib/shell-data";
 import { IncomeExpenseChart } from "@/components/income-expense-chart";
 import { RoomOccupancyMeter } from "@/components/room-occupancy-meter";
 // add to the lucide-react import
@@ -20,6 +24,7 @@ import {
   UserPlus,
   Wrench,
   ClipboardList,
+  Check,
 } from "lucide-react";
 
 type RoomRow = {
@@ -74,6 +79,8 @@ export default async function AdminPage() {
     { data: transactions },
     { data: pendingRequests },
     { data: pendingMaintenanceRequests },
+    pendingRequestsCount,
+    pendingMaintenanceCount,
   ] = await Promise.all([
     supabase
       .from("dormitories")
@@ -112,13 +119,19 @@ export default async function AdminPage() {
       .eq("status", "pending")
       .order("created_at", { ascending: true })
       .limit(3),
+    getPendingRequestsCount(dormId),
+    getPendingMaintenanceRequestsCount(dormId),
   ]);
 
   const roomRows = (rooms as RoomRow[] | null) ?? [];
   const tenantRows = (tenants as TenantRow[] | null) ?? [];
   const tenantIds = tenantRows.map((t) => t.id);
 
-  const [{ data: recentPayments }, { data: allPayments }] = tenantIds.length
+  const [
+    { data: recentPayments },
+    { data: allPayments },
+    { data: pendingPayments, count: pendingPaymentsCount },
+  ] = tenantIds.length
     ? await Promise.all([
         supabase
           .from("payments")
@@ -132,8 +145,17 @@ export default async function AdminPage() {
           .select("amount, paid_at")
           .eq("status", "confirmed")
           .in("tenant_id", tenantIds),
+        // Tenant-reported payments waiting for the owner to confirm or
+        // reject -- the most actionable thing on the dashboard.
+        supabase
+          .from("payments")
+          .select("id, amount, tenant_id, paid_at", { count: "exact" })
+          .eq("status", "pending")
+          .in("tenant_id", tenantIds)
+          .order("paid_at", { ascending: true })
+          .limit(3),
       ])
-    : [{ data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }, { data: [], count: 0 }];
 
   // ------------------------------------------------------------
   // Derived stats — every number below comes straight from the
@@ -269,6 +291,7 @@ export default async function AdminPage() {
           86_400_000
       );
       return {
+        daysOverdue,
         key: `bill-${b.id}`,
         icon: AlertTriangle,
         iconClass: "text-status-overdue",
@@ -281,7 +304,18 @@ export default async function AdminPage() {
         href: "/admin/billing",
       };
     })
-    .sort((a, b) => (a.detail < b.detail ? 1 : -1));
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  const pendingPaymentItems = (pendingPayments ?? []).map((p) => ({
+    key: `payment-${p.id}`,
+    icon: Banknote,
+    iconClass: "text-status-partial",
+    title: `${tenantNameById.get(p.tenant_id) ?? "A tenant"} · ${formatMoney(
+      p.amount
+    )}`,
+    detail: "Payment report waiting for your confirmation",
+    href: "/admin/payments",
+  }));
 
   const applicationItems = (pendingRequests ?? []).map((r) => ({
     key: `request-${r.id}`,
@@ -319,12 +353,85 @@ export default async function AdminPage() {
     })
   );
 
+  // Ordered by how actionable each is: money waiting on you first.
   const attentionItems = [
+    ...pendingPaymentItems,
     ...overdueItems,
     ...applicationItems,
-    ...maintenanceItems,
     ...maintenanceRequestItems,
+    ...maintenanceItems,
   ].slice(0, 5);
+
+  // Exact counts for the summary chips (the lists above are capped).
+  const attentionChips = [
+    {
+      key: "payments",
+      label: "payments to confirm",
+      count: pendingPaymentsCount ?? 0,
+      href: "/admin/payments",
+      icon: Banknote,
+      iconClass: "text-status-partial",
+    },
+    {
+      key: "overdue",
+      label: "overdue bills",
+      count: overdueItems.length,
+      href: "/admin/billing",
+      icon: AlertTriangle,
+      iconClass: "text-status-overdue",
+    },
+    {
+      key: "requests",
+      label: "tenant requests",
+      count: pendingRequestsCount,
+      href: "/admin/tenant-requests",
+      icon: UserPlus,
+      iconClass: "text-status-partial",
+    },
+    {
+      key: "maintenance",
+      label: "maintenance requests",
+      count: pendingMaintenanceCount,
+      href: "/admin/maintenance",
+      icon: ClipboardList,
+      iconClass: "text-status-partial",
+    },
+  ].filter((chip) => chip.count > 0);
+
+  // First-run guidance: the four things a new owner has to do, in order,
+  // each derived from real data so it ticks itself off.
+  const setupSteps = [
+    {
+      key: "rooms",
+      label: "Add your rooms",
+      hint: "Rooms are what tenants get assigned to and billed for.",
+      done: totalRooms > 0,
+      href: "/admin/rooms#add-room",
+    },
+    {
+      key: "share",
+      label: "Share your Dorm ID",
+      hint: "Tenants sign up with it. It's at the bottom of this page.",
+      done: tenantRows.length > 0 || pendingRequestsCount > 0,
+      href: "#dorm-id",
+    },
+    {
+      key: "assign",
+      label: "Approve tenants and assign rooms",
+      hint: "Review sign-ups, then put each tenant in a room.",
+      done: occupiedBeds > 0,
+      href: "/admin/tenant-requests",
+    },
+    {
+      key: "bills",
+      label: "Generate your first bills",
+      hint: "One click creates this month's rent bills.",
+      done: (bills ?? []).length > 0,
+      href: "/admin/billing",
+    },
+  ];
+  const setupDone = setupSteps.filter((s) => s.done).length;
+  const nextSetupStep = setupSteps.find((s) => !s.done);
 
   const ownerFirstName =
     (session.profile?.full_name ?? "").split(" ")[0] || "there";
@@ -341,6 +448,103 @@ export default async function AdminPage() {
           {dorm?.name ?? "your dormitory"}.
         </p>
       </div>
+
+      {/* Setup checklist -- only until the basics are in place */}
+      {nextSetupStep && (
+        <div className="mb-6 rounded-lg border border-border bg-surface p-5">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <p className="font-heading text-sm font-semibold">
+              Get your dorm set up
+            </p>
+            <p className="text-xs text-foreground-muted">
+              {setupDone} of {setupSteps.length} done
+            </p>
+          </div>
+
+          <div
+            className="mb-4 h-1.5 overflow-hidden rounded-full bg-surface-muted"
+            role="progressbar"
+            aria-label="Setup progress"
+            aria-valuemin={0}
+            aria-valuemax={setupSteps.length}
+            aria-valuenow={setupDone}
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${(setupDone / setupSteps.length) * 100}%` }}
+            />
+          </div>
+
+          <ol className="space-y-1">
+            {setupSteps.map((step, i) => {
+              const isNext = step.key === nextSetupStep.key;
+              return (
+                <li key={step.key}>
+                  <Link
+                    href={step.href}
+                    className={`flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-surface-muted ${
+                      isNext ? "bg-surface-muted" : ""
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                        step.done
+                          ? "bg-status-paid text-surface"
+                          : isNext
+                          ? "bg-primary text-surface"
+                          : "border border-border text-foreground-muted"
+                      }`}
+                    >
+                      {step.done ? <Check className="h-3 w-3" /> : i + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span
+                        className={`block text-sm font-medium ${
+                          step.done
+                            ? "text-foreground-muted line-through"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {step.label}
+                      </span>
+                      {!step.done && (
+                        <span className="block text-xs text-foreground-muted">
+                          {step.hint}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+
+      {/* Needs-attention summary chips -- exact counts, one tap away */}
+      {attentionChips.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {attentionChips.map((chip) => {
+            const Icon = chip.icon;
+            return (
+              <Link
+                key={chip.key}
+                href={chip.href}
+                className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+              >
+                <Icon className={`h-3.5 w-3.5 ${chip.iconClass}`} />
+                <span>
+                  <span className="font-mono font-semibold text-foreground">
+                    {chip.count}
+                  </span>{" "}
+                  {chip.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -518,7 +722,10 @@ export default async function AdminPage() {
       </div>
 
       {/* Share dorm ID */}
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <div
+        id="dorm-id"
+        className="scroll-mt-6 rounded-lg border border-border bg-surface p-6"
+      >
         <p className="font-heading text-sm font-semibold mb-1">
           {dorm?.name ?? "Your dormitory"}
         </p>

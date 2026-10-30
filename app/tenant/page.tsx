@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantAccessState } from "@/lib/tenant-status";
 import { RegistrationStatus } from "@/components/registration-status";
+import { getNotificationSettings } from "@/lib/notification-settings";
 import {
   billStatusStyles,
   formatMoney,
@@ -169,6 +170,15 @@ export default async function TenantPage({
 
   const standing = getAccountStanding(standingBills ?? []);
 
+  // The owner's "Payment reminders" / "Overdue notifications" toggles decide
+  // whether the dashboard banner below is shown (balances stay visible in
+  // the tiles either way).
+  const notifications = await getNotificationSettings(me?.dorm_id);
+  const showPaymentBanner =
+    standing.status === "overdue"
+      ? notifications.overdueNotifications
+      : standing.status !== "current" && notifications.paymentReminders;
+
   // ---------------------------------------------------------
   // Recent transactions -- just the last 3 confirmed payments for the
   // "at a glance" card below, not the full history (that's the
@@ -228,7 +238,7 @@ export default async function TenantPage({
           page is "do I owe anything, and what do I do about it?". Online
           payment isn't supported, so the action is reporting a payment
           already made to the dorm owner (handled on the Billing tab). */}
-      {standing.status !== "current" ? (
+      {showPaymentBanner ? (
         <div
           className={`mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 ${
             standing.status === "overdue"
@@ -281,6 +291,7 @@ export default async function TenantPage({
           </Link>
         </div>
       ) : (
+        standing.status === "current" &&
         (standingBills ?? []).length > 0 && (
           <div className="mb-5 flex items-center gap-3 rounded-lg border border-status-paid/30 bg-status-paid/10 px-4 py-3">
             <span

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { TenantShell } from "@/components/tenant-shell";
+import { AppearanceSync } from "@/components/appearance-sync";
+import { getSavedAppearance } from "@/lib/appearance";
 import {
   getDormName,
   getMyPendingMaintenanceRequestsCount,
@@ -16,18 +18,22 @@ export default async function TenantLayout({
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
 
-  const [dormName, pendingMaintenanceCount] = await Promise.all([
+  const [dormName, pendingMaintenanceCount, appearance] = await Promise.all([
     getDormName(session.profile?.dorm_id),
     getMyPendingMaintenanceRequestsCount(session.user.id),
+    getSavedAppearance(session.user.id),
   ]);
 
   return (
-    <TenantShell
-      dormName={dormName}
-      tenantName={session.profile?.full_name}
-      pendingMaintenanceCount={pendingMaintenanceCount}
-    >
-      {children}
-    </TenantShell>
+    <>
+      <AppearanceSync userId={session.user.id} {...appearance} />
+      <TenantShell
+        dormName={dormName}
+        tenantName={session.profile?.full_name}
+        pendingMaintenanceCount={pendingMaintenanceCount}
+      >
+        {children}
+      </TenantShell>
+    </>
   );
 }
