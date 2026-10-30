@@ -1,13 +1,18 @@
 -- ============================================================
 -- Maintenance requests
 --
--- RECONSTRUCTED from lib/actions.ts (submitMaintenanceRequest,
--- updateMaintenanceRequestStatus), app/tenant/maintenance/page.tsx,
--- app/admin/maintenance/page.tsx and app/admin/page.tsx. The
--- original file was never saved to git, so this was NOT generated
--- from the live database. Compare against the live schema before
--- relying on it as exact (column types, defaults, and RLS policies
--- in particular).
+-- Originally reconstructed from lib/actions.ts, the tenant/admin
+-- maintenance pages and the dashboard, because the original file was
+-- never saved to git. Since then it has been CHECKED AGAINST THE LIVE
+-- DATABASE (2026-10-30, via the REST schema): table, column names and
+-- types, nullability, defaults and the status enum below now match
+-- production exactly -- including the enum's real name
+-- (maintenance_request_status) and the owner_notes column, which the
+-- first reconstruction had wrong/missing.
+--
+-- Still reconstructed, not verified: the indexes and the RLS
+-- policies at the bottom (they are not visible through the REST
+-- schema).
 --
 -- Guarded so it is safe to run where the table already exists.
 --
@@ -19,8 +24,8 @@
 
 do $$
 begin
-  if not exists (select 1 from pg_type where typname = 'maintenance_status') then
-    create type public.maintenance_status as enum (
+  if not exists (select 1 from pg_type where typname = 'maintenance_request_status') then
+    create type public.maintenance_request_status as enum (
       'pending',
       'acknowledged',
       'in_progress',
@@ -37,9 +42,10 @@ create table if not exists public.maintenance_requests (
   room_id uuid references public.rooms(id),
   title text not null,
   description text,
-  status public.maintenance_status not null default 'pending',
+  status public.maintenance_request_status not null default 'pending',
   acknowledged_at timestamptz,
   completed_at timestamptz,
+  owner_notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
