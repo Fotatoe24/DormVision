@@ -262,7 +262,7 @@ export default function SettingsForm({ dorm, settings }: Props) {
 
           <Toggle
             label="New tenant notifications"
-            description="Show a badge on Tenant Requests when a new tenant applies."
+            description="Show a badge on Tenant Requests and email you when a new tenant applies."
             checked={newTenantNotifications}
             onChange={setNewTenantNotifications}
           />
@@ -281,14 +281,14 @@ export default function SettingsForm({ dorm, settings }: Props) {
               Notifications
             </h2>
             <p className="text-xs text-foreground-muted">
-              Choose which in-app alerts and badges appear. No emails or texts are sent.
+              Choose which alerts you get as badges and emails. Reminders and overdue alerts for tenants appear on their dashboard only (no emails or texts yet).
             </p>
           </div>
         </div>
 
         <Toggle
           label="Maintenance notifications"
-          description="Show a badge on Maintenance when a tenant submits a request."
+          description="Show a badge on Maintenance and email you when a tenant submits a request."
           checked={maintenanceNotifications}
           onChange={setMaintenanceNotifications}
         />

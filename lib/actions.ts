@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers, cookies } from "next/headers";
+import { after } from "next/server";
 import crypto from "crypto";
 import {
   getSessionUser,
@@ -16,6 +17,13 @@ import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { toDateString } from "@/lib/billing";
 import { getCurrentTenancy } from "@/lib/tenant-status";
+import {
+  notifyOwnerMaintenanceRequest,
+  notifyOwnerNewRegistration,
+  notifyOwnerPaymentReported,
+  notifyTenantPaymentDecision,
+  notifyTenantRegistrationDecision,
+} from "@/lib/notifications";
 
 // ============================================================
 // AUTHENTICATION
@@ -55,6 +63,15 @@ async function getSiteOrigin() {
   const protocol = host?.startsWith("localhost") ? "http" : "https";
 
   return `${protocol}://${host}`;
+}
+
+// Email notifications go out AFTER the response is sent (Next's after()), so
+// a slow SMTP handshake never makes a click feel stuck, and a failed email
+// can never undo or block the action that triggered it. The origin has to be
+// resolved here, while the request's headers are still readable.
+async function queueEmail(send: (origin: string) => Promise<void>) {
+  const origin = await getSiteOrigin();
+  after(() => send(origin));
 }
 
 export async function login(formData: FormData) {
@@ -456,6 +473,10 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
+  await queueEmail((origin) =>
+    notifyOwnerNewRegistration(origin, dormId, fullName)
+  );
+
   const token = await createSessionToken({
     id: userId,
     email,
@@ -594,6 +615,10 @@ export async function approveRegistrationRequest(formData: FormData) {
     );
   }
 
+  await queueEmail((origin) =>
+    notifyTenantRegistrationDecision(origin, request.user_id, dormId, true)
+  );
+
   revalidatePath("/admin/tenant-requests");
   revalidatePath("/admin/tenants");
   revalidatePath("/admin");
@@ -627,7 +652,7 @@ export async function rejectRegistrationRequest(formData: FormData) {
     .eq("id", requestId)
     .eq("dorm_id", dormId)
     .eq("status", "pending")
-    .select("id, full_name");
+    .select("id, full_name, user_id");
 
   if (error) {
     redirect(
@@ -643,6 +668,16 @@ export async function rejectRegistrationRequest(formData: FormData) {
         )
     );
   }
+
+  await queueEmail((origin) =>
+    notifyTenantRegistrationDecision(
+      origin,
+      data[0].user_id,
+      dormId,
+      false,
+      reason || null
+    )
+  );
 
   revalidatePath("/admin/tenant-requests");
   redirect(
@@ -819,6 +854,10 @@ export async function submitRegistrationRequest(formData: FormData) {
       role: session.profile.role,
       dormId,
     })
+  );
+
+  await queueEmail((origin) =>
+    notifyOwnerNewRegistration(origin, dormId, session.profile.full_name)
   );
 
   revalidatePath("/tenant");
@@ -2170,6 +2209,10 @@ export async function reportPayment(formData: FormData) {
     );
   }
 
+  await queueEmail((origin) =>
+    notifyOwnerPaymentReported(origin, tenant.id, remaining, method)
+  );
+
   revalidatePath("/tenant/billing");
   redirect(
     "/tenant/billing?saved=" +
@@ -2192,7 +2235,7 @@ export async function confirmPendingPayment(formData: FormData) {
 
   const { data: payment, error: paymentError } = await admin
     .from("payments")
-    .select("id, bill_id, amount, status")
+    .select("id, bill_id, tenant_id, amount, status")
     .eq("id", paymentId)
     .single();
 
@@ -2288,6 +2331,15 @@ export async function confirmPendingPayment(formData: FormData) {
     );
   }
 
+  await queueEmail((origin) =>
+    notifyTenantPaymentDecision(
+      origin,
+      payment.tenant_id,
+      reportedAmount,
+      true
+    )
+  );
+
   revalidatePath("/admin/payments");
   revalidatePath("/admin/billing");
   revalidatePath("/admin");
@@ -2309,7 +2361,7 @@ export async function rejectPendingPayment(formData: FormData) {
 
   const { data: payment, error: paymentError } = await admin
     .from("payments")
-    .select("id, bill_id, status")
+    .select("id, bill_id, tenant_id, amount, status")
     .eq("id", paymentId)
     .single();
 
@@ -2355,6 +2407,15 @@ export async function rejectPendingPayment(formData: FormData) {
       "/admin/payments?error=" + encodeURIComponent(updateError.message)
     );
   }
+
+  await queueEmail((origin) =>
+    notifyTenantPaymentDecision(
+      origin,
+      payment.tenant_id,
+      Number(payment.amount),
+      false
+    )
+  );
 
   revalidatePath("/admin/payments");
   revalidatePath("/tenant");
@@ -2955,6 +3016,10 @@ export async function submitMaintenanceRequest(formData: FormData) {
   if (error) {
     redirect("/tenant/maintenance?error=" + encodeURIComponent(error.message));
   }
+
+  await queueEmail((origin) =>
+    notifyOwnerMaintenanceRequest(origin, tenant.id, tenant.dorm_id, title)
+  );
 
   revalidatePath("/tenant/maintenance");
   redirect(
