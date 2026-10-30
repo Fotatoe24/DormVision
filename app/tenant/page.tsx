@@ -12,7 +12,15 @@ import {
   displayBillStatus,
   getAccountStanding,
 } from "@/lib/billing";
-import { Pencil, Wallet, Clock, Receipt, BedDouble } from "lucide-react";
+import {
+  AlertTriangle,
+  BedDouble,
+  Check,
+  Clock,
+  Pencil,
+  Receipt,
+  Wallet,
+} from "lucide-react";
 
 // "{Month} Rent" for a Recent Transactions row, derived from the
 // underlying bill's billing period (there's no free-text description
@@ -22,6 +30,18 @@ function rentDescription(periodStart?: string | null) {
   if (!periodStart) return "Rent";
   const d = new Date(periodStart + "T00:00:00");
   return `${d.toLocaleDateString("en-PH", { month: "short" })} Rent`;
+}
+
+// "due today" / "due in 5 days" / "3 days overdue" for the payment banner.
+function dueLabel(daysUntilDue: number | null) {
+  if (daysUntilDue === null) return "";
+  if (daysUntilDue < 0) {
+    const n = Math.abs(daysUntilDue);
+    return `${n} day${n === 1 ? "" : "s"} overdue`;
+  }
+  if (daysUntilDue === 0) return "due today";
+  if (daysUntilDue === 1) return "due tomorrow";
+  return `due in ${daysUntilDue} days`;
 }
 
 // Home -- just "what's going on with my room right now": water &
@@ -202,6 +222,78 @@ export default async function TenantPage({
         <div className="mb-4 rounded-md border border-status-paid/30 bg-status-paid/10 px-3 py-2 text-xs text-status-paid">
           {saved}
         </div>
+      )}
+
+      {/* What to do next: the one thing a tenant most wants from this
+          page is "do I owe anything, and what do I do about it?". Online
+          payment isn't supported, so the action is reporting a payment
+          already made to the dorm owner (handled on the Billing tab). */}
+      {standing.status !== "current" ? (
+        <div
+          className={`mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 ${
+            standing.status === "overdue"
+              ? "border-status-overdue/30 bg-status-overdue/10"
+              : "border-status-partial/30 bg-status-partial/10"
+          }`}
+        >
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              aria-hidden
+              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+                standing.status === "overdue"
+                  ? "bg-status-overdue/15 text-status-overdue"
+                  : "bg-status-partial/15 text-status-partial"
+              }`}
+            >
+              {standing.status === "overdue" ? (
+                <AlertTriangle className="h-4 w-4" />
+              ) : (
+                <Clock className="h-4 w-4" />
+              )}
+            </span>
+
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                {standing.status === "overdue"
+                  ? "Your payment is overdue"
+                  : "You have a payment coming up"}
+              </p>
+              <p className="mt-0.5 text-xs text-foreground-muted">
+                <span className="font-mono font-medium text-foreground">
+                  {formatMoney(standing.balance)}
+                </span>{" "}
+                outstanding
+                {standing.nextBill
+                  ? ` · ${dueLabel(standing.daysUntilDue)} (${formatBillDate(
+                      standing.nextBill.due_date
+                    )})`
+                  : ""}
+                . Pay your dorm owner, then report it so they can confirm.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/tenant/billing"
+            className="shrink-0 rounded-md bg-primary px-3.5 py-2 text-xs font-medium text-surface transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            Report a payment
+          </Link>
+        </div>
+      ) : (
+        (standingBills ?? []).length > 0 && (
+          <div className="mb-5 flex items-center gap-3 rounded-lg border border-status-paid/30 bg-status-paid/10 px-4 py-3">
+            <span
+              aria-hidden
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-status-paid/15 text-status-paid"
+            >
+              <Check className="h-4 w-4" />
+            </span>
+            <p className="text-sm font-medium text-foreground">
+              You&apos;re all caught up — nothing is due right now.
+            </p>
+          </div>
+        )
       )}
 
       {/* Account-standing tiles -- a glanceable summary; the full

@@ -4,6 +4,9 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, displayBillStatus } from "@/lib/billing";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
+import { CopyButton } from "@/components/copy-button";
+import { EmptyState } from "@/components/empty-state";
+import { Users } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
@@ -152,6 +155,17 @@ export default async function TenantsPage({
 
   const hasFilters = Boolean(q || status || payment);
 
+  // Only needed for the first-run empty state below: the Dorm ID is what a
+  // tenant signs up with, so surface it right where the owner would look.
+  const { data: dormForCode } =
+    tenants.length === 0 && !hasFilters
+      ? await supabase
+          .from("dormitories")
+          .select("join_code")
+          .eq("id", dormId)
+          .maybeSingle()
+      : { data: null };
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6">
@@ -269,14 +283,24 @@ export default async function TenantsPage({
             })}
           </div>
         ) : (
-          <div className="px-4 py-10 text-center">
-            <p className="text-sm font-medium">No tenants found</p>
-            <p className="mt-1 text-xs text-foreground-muted">
-              {hasFilters
+          <EmptyState
+            icon={Users}
+            title={hasFilters ? "No tenants found" : "No tenants yet"}
+            description={
+              hasFilters
                 ? "Try a different search or filter."
-                : "Tenants will show up here once they join with your Dorm ID."}
-            </p>
-          </div>
+                : "Share your Dorm ID with tenants. They sign up with it and appear here once you approve their request."
+            }
+            action={
+              hasFilters
+                ? undefined
+                : { label: "Review requests", href: "/admin/tenant-requests" }
+            }
+          >
+            {!hasFilters && dormForCode?.join_code && (
+              <CopyButton value={dormForCode.join_code} label="Copy Dorm ID" />
+            )}
+          </EmptyState>
         )}
       </div>
 

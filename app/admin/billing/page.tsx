@@ -12,7 +12,8 @@ import {
   type ModalBillRow,
   type ModalUtilityBill,
 } from "@/components/room-billing-modal";
-import { ChevronRight } from "lucide-react";
+import { BedDouble, ChevronRight } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -329,11 +330,21 @@ export default async function BillingPage({
 
         <div className="space-y-3">
           {pageRooms.length === 0 && (
-            <p className="rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
-              {roomSummaries.length === 0
-                ? "No rooms yet — add one from the Rooms page to get started."
-                : "No rooms match your filters."}
-            </p>
+            <EmptyState
+              bordered
+              icon={BedDouble}
+              title={roomSummaries.length === 0 ? "No rooms yet" : "No rooms match your filters"}
+              description={
+                roomSummaries.length === 0
+                  ? "Bills are created per room, so add a room and assign tenants first."
+                  : "Try a different search or filter."
+              }
+              action={
+                roomSummaries.length === 0
+                  ? { label: "Add a room", href: "/admin/rooms#add-room" }
+                  : undefined
+              }
+            />
           )}
 
           {pageRooms.map(({ room, tenants: roomTenants, utilityBills: roomUtilityBills, hasOutstanding, outstandingAmount }) => (

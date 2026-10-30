@@ -8,7 +8,8 @@ import { formatMoney, formatBillDate, formatPaymentDate } from "@/lib/billing";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
-import { Receipt } from "lucide-react";
+import { Banknote, Receipt } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
 const methodLabels: Record<string, string> = {
   cash: "Cash",
@@ -318,14 +319,20 @@ export default async function PaymentsPage({
             ))}
           </div>
         ) : (
-          <div className="px-4 py-10 text-center">
-            <p className="text-sm font-medium">No payments found</p>
-            <p className="mt-1 text-xs text-foreground-muted">
-              {hasFilters
+          <EmptyState
+            icon={Banknote}
+            title={hasFilters ? "No payments found" : "No payments yet"}
+            description={
+              hasFilters
                 ? "Try a different search or filter."
-                : "Payments will show up here once you record one on the Billing page."}
-            </p>
-          </div>
+                : "Payments show up here once you record one on the Billing page or confirm a tenant's report."
+            }
+            action={
+              hasFilters
+                ? undefined
+                : { label: "Go to Billing", href: "/admin/billing" }
+            }
+          />
         )}
       </div>
 

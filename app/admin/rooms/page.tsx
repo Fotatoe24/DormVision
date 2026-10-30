@@ -1,3 +1,5 @@
+import { EmptyState } from "@/components/empty-state";
+import { BedDouble } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
@@ -173,8 +175,9 @@ export default async function RoomsPage({
 
       {/* Add room */}
       <form
+        id="add-room"
         action={createRoom}
-        className="mb-6 rounded-lg border border-border bg-surface p-6"
+        className="mb-6 scroll-mt-6 rounded-lg border border-border bg-surface p-6"
       >
         <p className="mb-4 font-heading text-sm font-semibold">Add a room</p>
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -272,18 +275,24 @@ export default async function RoomsPage({
       {/* Rooms grid */}
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {allRooms.length === 0 && (
-          <p className="col-span-full rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
-            No rooms yet — add your first one above.
-          </p>
+          <EmptyState
+            bordered
+            className="col-span-full"
+            icon={BedDouble}
+            title="No rooms yet"
+            description="Add your first room to start assigning tenants and billing them."
+            action={{ label: "Add a room", href: "#add-room" }}
+          />
         )}
 
         {allRooms.length > 0 && visibleRooms.length === 0 && (
-          <div className="col-span-full rounded-lg border border-border bg-surface px-4 py-8 text-center">
-            <p className="text-sm font-medium">No rooms found</p>
-            <p className="mt-1 text-xs text-foreground-muted">
-              Try a different search or filter.
-            </p>
-          </div>
+          <EmptyState
+            bordered
+            className="col-span-full"
+            icon={BedDouble}
+            title="No rooms found"
+            description="Try a different search or filter."
+          />
         )}
 
         {visibleRooms.map((room) => {

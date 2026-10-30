@@ -5,6 +5,8 @@ import { updateMaintenanceRequestStatus } from "@/lib/actions";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { PaginationControls } from "@/components/pagination-controls";
 import { SubmitButton } from "@/components/submit-button";
+import { EmptyState } from "@/components/empty-state";
+import { Wrench } from "lucide-react";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 
 const statusStyles: Record<string, string> = {
@@ -117,9 +119,12 @@ export default async function MaintenancePage({
 
       <div className="space-y-3">
         {requestRows.length === 0 && (
-          <p className="rounded-lg border border-border bg-surface px-4 py-6 text-center text-sm text-foreground-muted">
-            No maintenance requests yet.
-          </p>
+          <EmptyState
+            bordered
+            icon={Wrench}
+            title="No maintenance requests"
+            description="When a tenant reports an issue, it will show up here for you to review."
+          />
         )}
 
         {requestRows.map((r) => {
