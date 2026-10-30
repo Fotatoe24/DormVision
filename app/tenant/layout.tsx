@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { TenantShell } from "@/components/tenant-shell";
+import { getCurrentTenancy } from "@/lib/tenant-status";
 import { AppearanceSync } from "@/components/appearance-sync";
 import { getSavedAppearance } from "@/lib/appearance";
 import {
@@ -18,8 +19,17 @@ export default async function TenantLayout({
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
 
+  // The dorm shown in the shell is the one of their live tenancy; the
+  // session's dorm is only the fallback for someone who isn't a tenant yet
+  // (it can lag behind when an owner reactivates them, or after a move).
+  const tenancy = await getCurrentTenancy(session.user.id);
+  const shellDormId =
+    tenancy && tenancy.status !== "moved_out"
+      ? tenancy.dorm_id
+      : session.profile?.dorm_id;
+
   const [dormName, pendingMaintenanceCount, appearance] = await Promise.all([
-    getDormName(session.profile?.dorm_id),
+    getDormName(shellDormId),
     getMyPendingMaintenanceRequestsCount(session.user.id),
     getSavedAppearance(session.user.id),
   ]);

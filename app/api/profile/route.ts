@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentTenancy } from "@/lib/tenant-status";
 
 const BUCKET_NAME = "avatars";
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
@@ -336,10 +337,21 @@ export async function PATCH(request: Request) {
 
     const admin = createAdminClient();
 
+    // Only the current tenancy: rows for dorms they've already moved out
+    // of are history and shouldn't be rewritten.
+    const tenancy = await getCurrentTenancy(session.user.id);
+
+    if (!tenancy) {
+      return NextResponse.json(
+        { error: "No tenant record found." },
+        { status: 404 }
+      );
+    }
+
     const { error } = await admin
       .from("tenants")
       .update(contactUpdates)
-      .eq("profile_id", session.user.id);
+      .eq("id", tenancy.id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

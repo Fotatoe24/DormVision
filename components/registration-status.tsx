@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
 import {
@@ -6,6 +7,7 @@ import {
   logout,
 } from "@/lib/actions";
 import { formatBillDate } from "@/lib/billing";
+import type { TenantAccessState } from "@/lib/tenant-status";
 
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
@@ -63,16 +65,25 @@ function ResubmitForm() {
   );
 }
 
+// A moved-out tenant keeps access to the billing, invoices and receipts of
+// the dorms they've lived in -- read-only, on its own page.
+function PastStaysLink() {
+  return (
+    <Link
+      href="/tenant/history"
+      className="mt-4 inline-block text-xs font-medium text-primary hover:underline"
+    >
+      View my past billing, invoices and receipts
+    </Link>
+  );
+}
+
 export function RegistrationStatus({
   state,
   error,
   saved,
 }: {
-  state:
-    | { status: "moved_out"; moveOutDate: string | null }
-    | { status: "pending"; requestId: string }
-    | { status: "rejected"; requestId: string; reason: string | null }
-    | { status: "none" };
+  state: Exclude<TenantAccessState, { status: "approved" }>;
   error?: string;
   saved?: string;
 }) {
@@ -91,24 +102,37 @@ export function RegistrationStatus({
       )}
 
       {state.status === "moved_out" && (
-        <div className="rounded-lg border border-border bg-surface p-6 text-center">
-          <p className="font-heading text-sm font-semibold text-foreground">
-            You&apos;ve moved out of this dormitory
-          </p>
-          <p className="mt-2 text-sm text-foreground-muted">
-            Your tenant account here is no longer active, so the dashboard,
-            billing, and maintenance pages are closed. Your billing and
-            payment history is kept on file with the dorm owner.
-          </p>
-          {state.moveOutDate && (
-            <span className="mt-4 inline-block rounded-full bg-status-unpaid/15 px-3 py-1 text-xs font-medium text-status-unpaid">
-              Moved out {formatBillDate(state.moveOutDate)}
-            </span>
-          )}
-          <p className="mt-4 text-xs text-foreground-muted">
-            Moving back in? Contact the dorm owner directly — they can
-            reactivate your account from their side.
-          </p>
+        <div className="space-y-6">
+          <div className="rounded-lg border border-border bg-surface p-6 text-center">
+            <p className="font-heading text-sm font-semibold text-foreground">
+              You&apos;ve moved out of this dormitory
+            </p>
+            <p className="mt-2 text-sm text-foreground-muted">
+              Your tenant account here is no longer active, so the dashboard,
+              billing, and maintenance pages are closed. Your billing and
+              payment history is kept, and you can still view it.
+            </p>
+            {state.moveOutDate && (
+              <span className="mt-4 inline-block rounded-full bg-status-unpaid/15 px-3 py-1 text-xs font-medium text-status-unpaid">
+                Moved out {formatBillDate(state.moveOutDate)}
+              </span>
+            )}
+            <div>
+              <PastStaysLink />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface p-6">
+            <p className="mb-1 font-heading text-sm font-semibold">
+              Joining a dormitory?
+            </p>
+            <p className="mb-4 text-xs text-foreground-muted">
+              Moving to a new dorm that uses DormVision, or back to this one?
+              Enter its Dorm ID and the owner will review your request. Your
+              account and history carry over.
+            </p>
+            <ResubmitForm />
+          </div>
         </div>
       )}
 
@@ -135,6 +159,11 @@ export function RegistrationStatus({
               Cancel this request
             </ConfirmSubmitButton>
           </form>
+          {state.hasPastStays && (
+            <div>
+              <PastStaysLink />
+            </div>
+          )}
         </div>
       )}
 
@@ -153,6 +182,7 @@ export function RegistrationStatus({
               You may contact the dorm owner for more information, or submit
               a new request below.
             </p>
+            {state.hasPastStays && <PastStaysLink />}
           </div>
           <div className="rounded-lg border border-border bg-surface p-6">
             <p className="mb-4 font-heading text-sm font-semibold">

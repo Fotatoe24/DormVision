@@ -61,10 +61,7 @@ export default async function TenantMaintenancePage({
   // Same access gate as Home and Billing -- a moved-out (or still
   // pending/rejected) tenant shouldn't be able to file new maintenance
   // requests for a room they no longer occupy.
-  const accessState = await getTenantAccessState(
-    session.user.id,
-    session.profile?.dorm_id ?? null
-  );
+  const accessState = await getTenantAccessState(session.user.id);
 
   if (accessState.status !== "approved") {
     return (
@@ -78,6 +75,9 @@ export default async function TenantMaintenancePage({
     .from("tenants")
     .select("id, dorm_id")
     .eq("profile_id", session.user.id)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   const { allowRequests } = await getMaintenanceSettings(tenant?.dorm_id);

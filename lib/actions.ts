@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { toDateString } from "@/lib/billing";
+import { getCurrentTenancy } from "@/lib/tenant-status";
 
 // ============================================================
 // AUTHENTICATION
@@ -512,15 +513,32 @@ export async function approveRegistrationRequest(formData: FormData) {
   // for this person in this dorm (e.g. a stale duplicate request).
   const { data: existingTenant } = await admin
     .from("tenants")
-    .select("id")
+    .select("id, status")
     .eq("profile_id", request.user_id)
     .eq("dorm_id", dormId)
     .maybeSingle();
 
-  if (existingTenant) {
+  if (existingTenant && existingTenant.status !== "moved_out") {
     redirect(
       "/admin/tenant-requests?error=" +
         encodeURIComponent("This person is already a tenant.")
+    );
+  }
+
+  // One live tenancy per account: refuse if they're an active tenant at
+  // some other dormitory right now (they need to be moved out there first).
+  const currentElsewhere = await getCurrentTenancy(request.user_id);
+
+  if (
+    currentElsewhere &&
+    currentElsewhere.status !== "moved_out" &&
+    currentElsewhere.dorm_id !== dormId
+  ) {
+    redirect(
+      "/admin/tenant-requests?error=" +
+        encodeURIComponent(
+          "This person is currently a tenant at another dormitory."
+        )
     );
   }
 
@@ -529,12 +547,30 @@ export async function approveRegistrationRequest(formData: FormData) {
   // Creates the tenant record only -- deliberately no room
   // assignment. A tenant only occupies a room once the owner
   // explicitly assigns one via assignTenantToRoom on the Rooms page.
-  const { error: tenantError } = await admin.from("tenants").insert({
-    profile_id: request.user_id,
-    dorm_id: dormId,
-    full_name: request.full_name,
-    contact_number: request.contact_number,
-  });
+  //
+  // A returning tenant (moved out of THIS dorm earlier) gets their old row
+  // reactivated instead of a second one, so their history here stays in one
+  // place.
+  const { error: tenantError } = existingTenant
+    ? await admin
+        .from("tenants")
+        .update({
+          status: "active",
+          room_id: null,
+          move_in_date: toDateString(new Date()),
+          move_out_date: null,
+          full_name: request.full_name,
+          ...(request.contact_number
+            ? { contact_number: request.contact_number }
+            : {}),
+        })
+        .eq("id", existingTenant.id)
+    : await admin.from("tenants").insert({
+        profile_id: request.user_id,
+        dorm_id: dormId,
+        full_name: request.full_name,
+        contact_number: request.contact_number,
+      });
 
   if (tenantError) {
     redirect(
@@ -691,17 +727,20 @@ export async function submitRegistrationRequest(formData: FormData) {
 
   const dormId = matches[0].id;
 
-  const { data: existingTenant } = await admin
-    .from("tenants")
-    .select("id")
-    .eq("profile_id", session.user.id)
-    .eq("dorm_id", dormId)
-    .maybeSingle();
+  // A live tenancy anywhere blocks a new request -- but a MOVED-OUT one
+  // doesn't: that's exactly the person who is moving to another dorm (or
+  // back to this one). On approval their old tenants row is kept as
+  // history (new dorm) or reactivated (same dorm).
+  const currentTenancy = await getCurrentTenancy(session.user.id);
 
-  if (existingTenant) {
+  if (currentTenancy && currentTenancy.status !== "moved_out") {
     redirect(
       "/tenant?error=" +
-        encodeURIComponent("You're already a tenant at that dormitory.")
+        encodeURIComponent(
+          currentTenancy.dorm_id === dormId
+            ? "You're already a tenant at that dormitory."
+            : "You're already a tenant at another dormitory. Ask that dorm's owner to mark you as moved out before joining a new one."
+        )
     );
   }
 
@@ -768,6 +807,19 @@ export async function submitRegistrationRequest(formData: FormData) {
     .from("users")
     .update({ dorm_id: dormId })
     .eq("id", session.user.id);
+
+  // The dorm is also baked into the session cookie, so re-issue it --
+  // otherwise someone moving from one dorm to another keeps seeing the
+  // old dorm until they sign out and back in.
+  await setSessionCookie(
+    await createSessionToken({
+      id: session.user.id,
+      email: session.user.email,
+      fullName: session.profile.full_name,
+      role: session.profile.role,
+      dormId,
+    })
+  );
 
   revalidatePath("/tenant");
   redirect("/tenant?saved=" + encodeURIComponent("Registration submitted."));
@@ -1414,6 +1466,25 @@ export async function reactivateTenant(formData: FormData) {
     redirect("/admin/tenants?error=" + encodeURIComponent("Tenant not found."));
   }
 
+  // One live tenancy per account: if they've since joined another dorm,
+  // they can't also be reactivated here until they move out of that one.
+  const currentElsewhere = await getCurrentTenancy(tenantId);
+
+  if (
+    currentElsewhere &&
+    currentElsewhere.status !== "moved_out" &&
+    currentElsewhere.dorm_id !== dormId
+  ) {
+    redirect(
+      "/admin/tenants/" +
+        tenant.id +
+        "?error=" +
+        encodeURIComponent(
+          "This person is currently a tenant at another dormitory, so they can't be reactivated here yet."
+        )
+    );
+  }
+
   const { error: updateError } = await supabase
     .from("tenants")
     .update({ status: "active", move_out_date: null })
@@ -1429,6 +1500,10 @@ export async function reactivateTenant(formData: FormData) {
         )
     );
   }
+
+  // Point the account's home dorm back here too (it may have been moved to
+  // another dorm they applied to in the meantime).
+  await supabase.from("users").update({ dorm_id: dormId }).eq("id", tenantId);
 
   revalidatePath("/admin/tenants");
   redirect(
@@ -2027,6 +2102,9 @@ export async function reportPayment(formData: FormData) {
     .from("tenants")
     .select("id")
     .eq("profile_id", session.user.id)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!tenant) {
@@ -2828,6 +2906,9 @@ async function requireTenantRecord() {
     .from("tenants")
     .select("id, dorm_id, room_id")
     .eq("profile_id", session.user.id)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!tenant) {

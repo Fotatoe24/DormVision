@@ -67,10 +67,7 @@ export default async function TenantPage({
   // just a hidden button. getTenantAccessState is the single source
   // of truth for what "approved" means anywhere in the app: presence
   // of a tenants row, not the user's role alone.
-  const accessState = await getTenantAccessState(
-    session.user.id,
-    session.profile?.dorm_id ?? null
-  );
+  const accessState = await getTenantAccessState(session.user.id);
 
   if (accessState.status !== "approved") {
     return (
@@ -98,6 +95,9 @@ export default async function TenantPage({
       `
     )
     .eq("profile_id", session.user.id)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (tenantError) {

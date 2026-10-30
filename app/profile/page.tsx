@@ -37,6 +37,9 @@ export default async function ProfilePage() {
             "contact_number, emergency_contact_name, emergency_contact_number"
           )
           .eq("profile_id", session.user.id)
+          .order("status", { ascending: true })
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle()
       : { data: null };
 

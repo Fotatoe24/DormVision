@@ -93,13 +93,15 @@ export async function getInvoiceData(billId: string): Promise<InvoiceResult> {
       return { ok: false, reason: "forbidden" };
     }
   } else if (session.profile?.role === "tenant") {
-    const { data: tenantRecord } = await admin
+    // A tenant can have several tenants rows (one per dorm they've lived
+    // in), and invoices from past stays must stay viewable -- so match
+    // against all of their own, not just the current one.
+    const { data: ownTenancies } = await admin
       .from("tenants")
       .select("id")
-      .eq("profile_id", session.user.id)
-      .maybeSingle();
+      .eq("profile_id", session.user.id);
 
-    if (!tenantRecord || tenantRecord.id !== bill.tenant_id) {
+    if (!(ownTenancies ?? []).some((t) => t.id === bill.tenant_id)) {
       return { ok: false, reason: "forbidden" };
     }
   } else {

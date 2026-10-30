@@ -70,6 +70,9 @@ export async function getMyPendingMaintenanceRequestsCount(
     .from("tenants")
     .select("id")
     .eq("profile_id", userId)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!tenant) return 0;

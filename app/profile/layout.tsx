@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { AdminShell } from "@/components/admin-shell";
 import { TenantShell } from "@/components/tenant-shell";
+import { getCurrentTenancy } from "@/lib/tenant-status";
 import { AppearanceSync } from "@/components/appearance-sync";
 import { getSavedAppearance } from "@/lib/appearance";
 import { getDormName, getPendingRequestsCount } from "@/lib/shell-data";
@@ -44,7 +45,13 @@ export default async function ProfileLayout({
     );
   }
 
-  const dormName = await getDormName(session.profile?.dorm_id);
+  // Same rule as app/tenant/layout.tsx: prefer the live tenancy's dorm.
+  const tenancy = await getCurrentTenancy(session.user.id);
+  const dormName = await getDormName(
+    tenancy && tenancy.status !== "moved_out"
+      ? tenancy.dorm_id
+      : session.profile?.dorm_id
+  );
 
   return (
     <>

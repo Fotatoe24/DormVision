@@ -47,10 +47,7 @@ export default async function TenantBillingPage({
   // approved yet (or was rejected) sees the same pending/rejected
   // screen here as anywhere else in the tenant app, rather than an
   // empty or broken billing page.
-  const accessState = await getTenantAccessState(
-    session.user.id,
-    session.profile?.dorm_id ?? null
-  );
+  const accessState = await getTenantAccessState(session.user.id);
 
   if (accessState.status !== "approved") {
     return (
@@ -67,11 +64,21 @@ export default async function TenantBillingPage({
     .from("tenants")
     .select("id, profile_id")
     .eq("profile_id", session.user.id)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (tenantError) {
     console.error("Tenant lookup error:", tenantError);
   }
+
+  // Dorms they've already moved out of -- their billing stays viewable.
+  const { count: pastStaysCount } = await supabase
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("profile_id", session.user.id)
+    .eq("status", "moved_out");
 
   // ---------------------------------------------------------
   // Get bills
@@ -185,9 +192,20 @@ export default async function TenantBillingPage({
 
   return (
     <div className="mx-auto max-w-4xl">
-      <p className="mb-4 font-heading text-sm font-semibold text-foreground">
-        Billing
-      </p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="font-heading text-sm font-semibold text-foreground">
+          Billing
+        </p>
+
+        {(pastStaysCount ?? 0) > 0 && (
+          <Link
+            href="/tenant/history"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Past stays
+          </Link>
+        )}
+      </div>
 
       {error && (
         <div className="mb-4 rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue">
