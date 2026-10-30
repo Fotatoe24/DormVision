@@ -20,7 +20,10 @@ const AVATAR_COLORS = [
   "#13222d",
 ];
 
-const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
+// What we'll even try to compress; the server only ever receives the
+// compressed result (about 512 px WebP, typically well under 100 KB).
+const MAX_AVATAR_SOURCE_BYTES = 15 * 1024 * 1024;
+const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 function initials(name: string) {
   return name
@@ -76,21 +79,43 @@ export function ProfileView({ user }: { user: ProfileUser }) {
   async function handlePhoto(file: File | undefined) {
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file.");
+    if (!AVATAR_TYPES.includes(file.type)) {
+      toast.error("Please choose a JPEG, PNG or WebP image.");
       return;
     }
 
-    if (file.size > MAX_AVATAR_BYTES) {
-      toast.error("Photo is too large — the limit is 3MB.");
+    if (file.size > MAX_AVATAR_SOURCE_BYTES) {
+      toast.error("Photo is too large — please choose one under 15MB.");
       return;
     }
 
     setUploadingPhoto(true);
 
     try {
+      // Compress once, here, before anything is sent. The avatar is shown at
+      // 64 px (128 px on high-DPI screens), so 512 px leaves plenty of room
+      // to stay sharp. Loaded on demand so it isn't in every page's bundle.
+      const { default: imageCompression } = await import(
+        "browser-image-compression"
+      );
+
+      const compressed = await imageCompression(file, {
+        maxWidthOrHeight: 512,
+        maxSizeMB: 0.2,
+        fileType: "image/webp",
+        initialQuality: 0.85,
+        useWebWorker: false, // the worker script is fetched from a public CDN; not worth that dependency
+      });
+
+      // Safari can't encode WebP and hands back another type; the server
+      // accepts JPEG/PNG/WebP and names the file by what it really is.
+      if (!AVATAR_TYPES.includes(compressed.type)) {
+        toast.error("Your browser couldn't prepare that photo. Try another.");
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("avatar", file);
+      formData.append("avatar", compressed, `avatar.${compressed.type === "image/png" ? "png" : compressed.type === "image/jpeg" ? "jpg" : "webp"}`);
 
       const res = await fetch("/api/profile", {
         method: "PATCH",
@@ -315,7 +340,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
+            accept="image/jpeg,image/png,image/webp"
             className="hidden"
             onChange={(e) => {
               void handlePhoto(e.target.files?.[0]);
@@ -328,6 +353,9 @@ export function ProfileView({ user }: { user: ProfileUser }) {
               alt={fullName}
               width={64}
               height={64}
+              // Already a ~512 px WebP (and a unique URL per upload): skip the
+              // image optimizer so it isn't re-encoded at lower quality.
+              unoptimized
               className="h-16 w-16 rounded-full object-cover"
             />
           ) : (

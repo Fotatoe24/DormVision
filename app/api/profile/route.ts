@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentTenancy } from "@/lib/tenant-status";
+import { imageExtension, sniffImageType } from "@/lib/image-files";
 
 const BUCKET_NAME = "avatars";
-const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
+// Matches the bucket limit (migration 0020). The browser compresses to about
+// 512 px WebP first, so real uploads are a small fraction of this.
+const MAX_AVATAR_BYTES = 1024 * 1024;
 
 // ---------------------------------------------------------
 // PATCH /api/profile
@@ -33,95 +36,40 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (!avatar.type.startsWith("image/")) {
+    if (avatar.size > MAX_AVATAR_BYTES) {
       return NextResponse.json(
-        { error: "Please upload an image file." },
-        { status: 400 }
+        { error: "Photo is too large — the limit is 1MB." },
+        { status: 413 }
       );
     }
 
-    if (avatar.size > MAX_AVATAR_BYTES) {
+    // The real type comes from the file's own bytes, not the browser-supplied
+    // File.type.
+    const bytes = new Uint8Array(await avatar.arrayBuffer());
+    const type = sniffImageType(bytes);
+
+    if (!type) {
       return NextResponse.json(
-        { error: "Photo is too large — the limit is 3MB." },
-        { status: 400 }
+        { error: "Please upload a JPEG, PNG or WebP image." },
+        { status: 415 }
       );
     }
 
     const admin = createAdminClient();
 
-    // -----------------------------------------------------
-    // Get current avatar URL
-    // -----------------------------------------------------
-    const { error: currentUserError } = await admin
-      .from("users")
-      .select("avatar_url")
-      .eq("id", session.user.id)
-      .single();
+    // A NEW, timestamped file every time, never an upsert over a fixed
+    // `avatar.jpg`: the URL changes whenever the picture does, so a browser or
+    // CDN holding the old image can't keep showing it. The path stays under
+    // the signed-in user's own folder.
+    const filePath = `${session.user.id}/avatar-${Date.now()}.${imageExtension(type)}`;
 
-    if (currentUserError) {
-      console.error("Failed to get current profile:", currentUserError);
-
-      return NextResponse.json(
-        { error: "Could not load your profile." },
-        { status: 500 }
-      );
-    }
-
-    // -----------------------------------------------------
-    // Determine file extension
-    // -----------------------------------------------------
-    const extensionMap: Record<string, string> = {
-      "image/jpeg": "jpg",
-      "image/png": "png",
-      "image/webp": "webp",
-      "image/gif": "gif",
-    };
-
-    const extension =
-      extensionMap[avatar.type] ??
-      avatar.name.split(".").pop()?.toLowerCase() ??
-      "jpg";
-
-    // Keep the path tied to the authenticated user.
-    const filePath = `${session.user.id}/avatar.${extension}`;
-
-    // -----------------------------------------------------
-    // Remove old avatar files first
-    // -----------------------------------------------------
-    const { data: oldFiles } = await admin.storage
-      .from(BUCKET_NAME)
-      .list(session.user.id);
-
-    if (oldFiles && oldFiles.length > 0) {
-      const filesToDelete = oldFiles
-        .filter((file) => file.name.startsWith("avatar."))
-        .map((file) => `${session.user.id}/${file.name}`);
-
-      if (filesToDelete.length > 0) {
-        const { error: removeError } = await admin.storage
-          .from(BUCKET_NAME)
-          .remove(filesToDelete);
-
-        if (removeError) {
-          console.error("Failed to remove previous avatar:", removeError);
-        }
-      }
-    }
-
-    // -----------------------------------------------------
-    // Convert File to ArrayBuffer
-    // -----------------------------------------------------
-    const arrayBuffer = await avatar.arrayBuffer();
-
-    // -----------------------------------------------------
-    // Upload to Supabase Storage
-    // -----------------------------------------------------
     const { error: uploadError } = await admin.storage
       .from(BUCKET_NAME)
-      .upload(filePath, arrayBuffer, {
-        contentType: avatar.type,
-        cacheControl: "3600",
-        upsert: true,
+      .upload(filePath, bytes, {
+        contentType: type,
+        // Immutable: the filename is unique, so it never changes underneath.
+        cacheControl: "31536000",
+        upsert: false,
       });
 
     if (uploadError) {
@@ -136,16 +84,10 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // -----------------------------------------------------
-    // Generate public URL
-    // -----------------------------------------------------
     const {
       data: { publicUrl },
     } = admin.storage.from(BUCKET_NAME).getPublicUrl(filePath);
 
-    // -----------------------------------------------------
-    // Save public URL in users.avatar_url
-    // -----------------------------------------------------
     const { error: updateError } = await admin
       .from("users")
       .update({
@@ -160,6 +102,28 @@ export async function PATCH(request: Request) {
       await admin.storage.from(BUCKET_NAME).remove([filePath]);
 
       return NextResponse.json({ error: updateError.message }, { status: 400 });
+    }
+
+    // Only now that the new photo is live, remove the previous ones (the old
+    // fixed-name `avatar.png` as well as earlier timestamped files). Failing
+    // here just leaves an unused file behind, so it isn't treated as an error.
+    const { data: oldFiles } = await admin.storage
+      .from(BUCKET_NAME)
+      .list(session.user.id);
+
+    const staleFiles = (oldFiles ?? [])
+      .filter((file) => file.name.startsWith("avatar"))
+      .map((file) => `${session.user.id}/${file.name}`)
+      .filter((path) => path !== filePath);
+
+    if (staleFiles.length > 0) {
+      const { error: removeError } = await admin.storage
+        .from(BUCKET_NAME)
+        .remove(staleFiles);
+
+      if (removeError) {
+        console.error("Failed to remove previous avatar:", removeError);
+      }
     }
 
     return NextResponse.json({
@@ -219,7 +183,7 @@ export async function PATCH(request: Request) {
 
     if (files && files.length > 0) {
       const filesToDelete = files
-        .filter((file) => file.name.startsWith("avatar."))
+        .filter((file) => file.name.startsWith("avatar"))
         .map((file) => `${session.user.id}/${file.name}`);
 
       if (filesToDelete.length > 0) {

@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 
 const FOCUSABLE_SELECTOR =
-  "button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex='-1'])";
+  "button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface";
@@ -18,6 +18,8 @@ type ConfirmDialogProps = {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "danger" | "default";
+  // Extra content under the description, e.g. a note field.
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -33,6 +35,7 @@ export function ConfirmDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   tone = "default",
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -137,6 +140,8 @@ export function ConfirmDialog({
             )}
           </div>
         </div>
+
+        {children && <div className="mt-4">{children}</div>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

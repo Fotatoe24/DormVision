@@ -1,4 +1,3 @@
-import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -10,6 +9,9 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 import { Banknote, Receipt } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { ProofViewer } from "@/components/proof-viewer";
+import { RejectPaymentButton } from "@/components/reject-payment-button";
+import { signProofUrls } from "@/lib/payment-proofs";
 
 const methodLabels: Record<string, string> = {
   cash: "Cash",
@@ -72,7 +74,9 @@ export default async function PaymentsPage({
 
   let paymentsQuery = supabase
     .from("payments")
-    .select("id, tenant_id, amount, method, paid_at, notes", { count: "exact" })
+    .select("id, tenant_id, amount, method, paid_at, notes, proof_path", {
+      count: "exact",
+    })
     .eq("status", "confirmed")
     .order("paid_at", { ascending: false });
 
@@ -138,7 +142,7 @@ export default async function PaymentsPage({
     ? await supabase
         .from("payments")
         .select(
-          "id, tenant_id, amount, method, paid_at, bills(due_date, billing_period_start)"
+          "id, tenant_id, amount, method, paid_at, proof_path, bills(due_date, billing_period_start)"
         )
         .eq("status", "pending")
         .in("tenant_id", allTenantIds)
@@ -148,6 +152,14 @@ export default async function PaymentsPage({
   if (pendingError) {
     console.error("Pending payments load error:", pendingError);
   }
+
+  // One-hour signed links for the proofs on screen. Both lists above were
+  // scoped to this owner's dorm, so only their own tenants' proofs get
+  // signed.
+  const proofUrls = await signProofUrls([
+    ...(pendingPayments ?? []).map((p) => p.proof_path),
+    ...(payments ?? []).map((p) => p.proof_path),
+  ]);
 
   const hasFilters = Boolean(q || method || from || to);
 
@@ -198,15 +210,29 @@ export default async function PaymentsPage({
                       : ""
                   }`}
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">
-                      {nameById.get(p.tenant_id) ?? "Unknown tenant"}
-                    </p>
-                    <p className="text-xs text-foreground-muted">
-                      {bill ? `Bill due ${formatBillDate(bill.due_date)} · ` : ""}
-                      Reported {formatPaymentDate(p.paid_at)} ·{" "}
-                      {methodLabels[p.method] ?? p.method}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    {p.proof_path && proofUrls.get(p.proof_path) && (
+                      <ProofViewer
+                        url={proofUrls.get(p.proof_path)!}
+                        label={`${nameById.get(p.tenant_id) ?? "Tenant"}, ${formatMoney(p.amount)}`}
+                      />
+                    )}
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {nameById.get(p.tenant_id) ?? "Unknown tenant"}
+                      </p>
+                      <p className="text-xs text-foreground-muted">
+                        {bill ? `Bill due ${formatBillDate(bill.due_date)} · ` : ""}
+                        Reported {formatPaymentDate(p.paid_at)} ·{" "}
+                        {methodLabels[p.method] ?? p.method}
+                      </p>
+                      {!p.proof_path && p.method !== "cash" && (
+                        <p className="text-xs text-foreground-muted">
+                          No proof attached
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -223,14 +249,12 @@ export default async function PaymentsPage({
 
                     <form action={rejectPendingPayment}>
                       <input type="hidden" name="paymentId" value={p.id} />
-                      <ConfirmSubmitButton
+                      <RejectPaymentButton
                         className="rounded-md border border-status-overdue/30 px-3 py-1.5 text-xs text-status-overdue hover:bg-status-overdue/10"
-                        title="Reject this payment report?"
                         description="It won't be applied to the bill, and the tenant will need to report it again."
-                        confirmLabel="Reject payment"
                       >
                         Reject
-                      </ConfirmSubmitButton>
+                      </RejectPaymentButton>
                     </form>
                   </div>
                 </div>
@@ -307,6 +331,13 @@ export default async function PaymentsPage({
                   <span className="font-mono text-sm text-status-paid">
                     {formatMoney(p.amount)}
                   </span>
+                  {p.proof_path && proofUrls.get(p.proof_path) && (
+                    <ProofViewer
+                      variant="link"
+                      url={proofUrls.get(p.proof_path)!}
+                      label={`${nameById.get(p.tenant_id) ?? "Tenant"}, ${formatMoney(p.amount)}`}
+                    />
+                  )}
                   <a
                     href={`/receipts/${p.id}`}
                     className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"

@@ -20,7 +20,6 @@ import { getCurrentTenancy } from "@/lib/tenant-status";
 import {
   notifyOwnerMaintenanceRequest,
   notifyOwnerNewRegistration,
-  notifyOwnerPaymentReported,
   notifyTenantPaymentDecision,
   notifyTenantRegistrationDecision,
 } from "@/lib/notifications";
@@ -2117,108 +2116,8 @@ export async function recordPayment(formData: FormData) {
 // request, not a fact, until reviewed.
 // ============================================================
 
-export async function reportPayment(formData: FormData) {
-  const session = await getSessionUser();
-
-  if (!session) {
-    redirect("/");
-  }
-
-  const billId = String(formData.get("billId") ?? "").trim();
-  const rawMethod = String(formData.get("method") ?? "cash").trim();
-  const validMethods = ["cash", "bank_transfer", "gcash", "other"];
-  const method = validMethods.includes(rawMethod) ? rawMethod : "cash";
-
-  if (!billId) {
-    redirect(
-      "/tenant/billing?error=" + encodeURIComponent("Bill ID is required.")
-    );
-  }
-
-  const admin = createAdminClient();
-
-  const { data: tenant } = await admin
-    .from("tenants")
-    .select("id")
-    .eq("profile_id", session.user.id)
-    .order("status", { ascending: true })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!tenant) {
-    redirect(
-      "/tenant/billing?error=" + encodeURIComponent("Tenant record not found.")
-    );
-  }
-
-  const { data: bill, error: billError } = await admin
-    .from("bills")
-    .select("id, total_amount, amount_paid")
-    .eq("id", billId)
-    .eq("tenant_id", tenant.id)
-    .single();
-
-  if (billError || !bill) {
-    redirect("/tenant/billing?error=" + encodeURIComponent("Bill not found."));
-  }
-
-  const remaining = Number(bill.total_amount) - Number(bill.amount_paid);
-
-  if (remaining <= 0) {
-    redirect(
-      "/tenant/billing?error=" +
-        encodeURIComponent("This bill is already fully paid.")
-    );
-  }
-
-  // Checked here for a clear message; migration 0011's partial unique
-  // index (one pending row per bill) is the real backstop under a race.
-  const { data: existingPending } = await admin
-    .from("payments")
-    .select("id")
-    .eq("bill_id", bill.id)
-    .eq("status", "pending")
-    .maybeSingle();
-
-  if (existingPending) {
-    redirect(
-      "/tenant/billing?error=" +
-        encodeURIComponent(
-          "You already have a payment report pending review for this bill."
-        )
-    );
-  }
-
-  const { error: insertError } = await admin.from("payments").insert({
-    bill_id: bill.id,
-    tenant_id: tenant.id,
-    amount: remaining,
-    method,
-    paid_at: new Date().toISOString(),
-    recorded_by: session.user.id,
-    status: "pending",
-  });
-
-  if (insertError) {
-    redirect(
-      "/tenant/billing?error=" +
-        encodeURIComponent(
-          "Could not submit payment report: " + insertError.message
-        )
-    );
-  }
-
-  await queueEmail((origin) =>
-    notifyOwnerPaymentReported(origin, tenant.id, remaining, method)
-  );
-
-  revalidatePath("/tenant/billing");
-  redirect(
-    "/tenant/billing?saved=" +
-      encodeURIComponent("Payment reported. Your dorm owner will confirm it.")
-  );
-}
+// reportPayment (the tenant's "I've Paid") now lives in
+// app/api/payments/report/route.ts, because it can carry a receipt image.
 
 export async function confirmPendingPayment(formData: FormData) {
   const dormId = await requireOwnerDormId();
@@ -2393,12 +2292,17 @@ export async function rejectPendingPayment(formData: FormData) {
 
   const session = await getSessionUser();
 
+  // Optional reason, shown to the tenant and included in the email.
+  const reviewNote =
+    String(formData.get("reviewNote") ?? "").trim().slice(0, 300) || null;
+
   const { error: updateError } = await admin
     .from("payments")
     .update({
       status: "rejected",
       reviewed_at: new Date().toISOString(),
       reviewed_by: session!.user.id,
+      review_note: reviewNote,
     })
     .eq("id", payment.id);
 
@@ -2413,7 +2317,8 @@ export async function rejectPendingPayment(formData: FormData) {
       origin,
       payment.tenant_id,
       Number(payment.amount),
-      false
+      false,
+      reviewNote
     )
   );
 

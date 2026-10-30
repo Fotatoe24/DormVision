@@ -123,7 +123,8 @@ export function notifyOwnerPaymentReported(
   origin: string,
   tenantId: string,
   amount: number,
-  method: string
+  method: string,
+  hasProof = false
 ) {
   return safely("payment reported", async () => {
     const contact = await tenantContact(tenantId);
@@ -141,6 +142,9 @@ export function notifyOwnerPaymentReported(
           heading: "A payment is waiting for your confirmation",
           paragraphs: [
             `${contact.tenant.full_name} reported a payment of ${money} (${via}).`,
+            ...(hasProof
+              ? ["They attached a photo or screenshot of their payment. You can view it in the app."]
+              : []),
             "Confirm it once you've received the money, or reject it if something's off.",
           ],
           cta: { label: "Review payment", url: `${origin}/admin/payments` },
@@ -232,7 +236,8 @@ export function notifyTenantPaymentDecision(
   origin: string,
   tenantId: string,
   amount: number,
-  confirmed: boolean
+  confirmed: boolean,
+  note?: string | null
 ) {
   return safely("payment decision", async () => {
     const contact = await tenantContact(tenantId);
@@ -253,6 +258,7 @@ export function notifyTenantPaymentDecision(
           ]
         : [
             `Hi ${contact.tenant.full_name}, your dorm owner couldn't accept your payment report of ${money}.`,
+            ...(note ? [`Their note: ${note}`] : []),
             "Please check with them, then report it again if you've paid.",
           ],
       cta: { label: "View billing", url: `${origin}/tenant/billing` },

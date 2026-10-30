@@ -1,11 +1,9 @@
-import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantAccessState } from "@/lib/tenant-status";
 import { RegistrationStatus } from "@/components/registration-status";
-import { reportPayment } from "@/lib/actions";
 import {
   billStatusStyles,
   formatMoney,
@@ -17,14 +15,10 @@ import {
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
 import { BillPaymentBreakdown } from "@/components/bill-payment-breakdown";
+import { PaymentReportForm } from "@/components/payment-report-form";
+import { ProofViewer } from "@/components/proof-viewer";
+import { signProofUrls } from "@/lib/payment-proofs";
 import { Receipt, FileText } from "lucide-react";
-
-const methodOptions: { value: string; label: string }[] = [
-  { value: "cash", label: "Cash" },
-  { value: "bank_transfer", label: "Bank transfer" },
-  { value: "gcash", label: "GCash" },
-  { value: "other", label: "Other" },
-];
 
 // Split out of app/tenant/page.tsx -- that page (Home) now covers
 // just "what's going on with my room right now" (water & electricity,
@@ -133,12 +127,22 @@ export default async function TenantBillingPage({
   const { data: pendingReports } = me?.id
     ? await supabase
         .from("payments")
-        .select("bill_id")
+        .select("bill_id, proof_path")
         .eq("tenant_id", me.id)
         .eq("status", "pending")
     : { data: [] };
 
   const pendingBillIds = new Set((pendingReports ?? []).map((p) => p.bill_id));
+
+  // The tenant's own proof for a pending report (a signed, expiring link).
+  const proofUrls = await signProofUrls(
+    (pendingReports ?? []).map((p) => p.proof_path)
+  );
+  const pendingProofByBill = new Map(
+    (pendingReports ?? [])
+      .filter((p) => p.proof_path && proofUrls.get(p.proof_path))
+      .map((p) => [p.bill_id, proofUrls.get(p.proof_path!)!])
+  );
 
   // ---------------------------------------------------------
   // Per-bill payment breakdown -- every confirmed payment that makes
@@ -148,6 +152,26 @@ export default async function TenantBillingPage({
   // all the toggle can ever reveal.
   // ---------------------------------------------------------
   const billIds = (bills ?? []).map((b) => b.id);
+
+  // Why the owner turned a payment report down, per bill (newest first), so
+  // the tenant knows what to fix before reporting again.
+  const { data: rejectedReports } =
+    me?.id && billIds.length > 0
+      ? await supabase
+          .from("payments")
+          .select("bill_id, review_note")
+          .eq("tenant_id", me.id)
+          .eq("status", "rejected")
+          .in("bill_id", billIds)
+          .order("reviewed_at", { ascending: false })
+      : { data: [] };
+
+  const rejectionNoteByBill = new Map<string, string | null>();
+  for (const r of rejectedReports ?? []) {
+    if (!rejectionNoteByBill.has(r.bill_id)) {
+      rejectionNoteByBill.set(r.bill_id, r.review_note);
+    }
+  }
 
   const { data: billPayments } =
     billIds.length > 0
@@ -304,34 +328,32 @@ export default async function TenantBillingPage({
                     {remaining > 0 && (
                       <div className="mt-2">
                         {pendingBillIds.has(bill.id) ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-status-partial/15 px-2.5 py-1 text-xs font-medium text-status-partial">
-                            Payment Pending Confirmation
-                          </span>
+                          <div className="flex flex-wrap items-center gap-3">
+                            {pendingProofByBill.get(bill.id) && (
+                              <ProofViewer
+                                url={pendingProofByBill.get(bill.id)!}
+                                label="Your payment proof"
+                              />
+                            )}
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-status-partial/15 px-2.5 py-1 text-xs font-medium text-status-partial">
+                              Payment Pending Confirmation
+                            </span>
+                          </div>
                         ) : (
-                          <form
-                            action={reportPayment}
-                            className="flex flex-wrap items-center gap-2"
-                          >
-                            <input
-                              type="hidden"
-                              name="billId"
-                              value={bill.id}
-                            />
-                            <select
-                              name="method"
-                              defaultValue="cash"
-                              className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                            >
-                              {methodOptions.map((m) => (
-                                <option key={m.value} value={m.value}>
-                                  {m.label}
-                                </option>
-                              ))}
-                            </select>
-                            <SubmitButton className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90">
-                              I&apos;ve Paid
-                            </SubmitButton>
-                          </form>
+                          <div className="space-y-2">
+                            {rejectionNoteByBill.has(bill.id) && (
+                              <p
+                                role="status"
+                                className="rounded-md border border-status-overdue/30 bg-status-overdue/10 px-3 py-2 text-xs text-status-overdue"
+                              >
+                                Your last payment report wasn&apos;t accepted
+                                {rejectionNoteByBill.get(bill.id)
+                                  ? `: ${rejectionNoteByBill.get(bill.id)}`
+                                  : "."}
+                              </p>
+                            )}
+                            <PaymentReportForm billId={bill.id} />
+                          </div>
                         )}
                       </div>
                     )}
