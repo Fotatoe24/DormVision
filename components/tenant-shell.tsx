@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions";
-import { LogOut, User, ChevronDown } from "lucide-react";
+import { LogOut, ChevronDown } from "lucide-react";
 import { ThemeMenuItem } from "@/components/theme-menu-item";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { BrandMark } from "@/components/brand-mark";
+import { UserAvatar } from "@/components/user-avatar";
 import { tenantNavigation } from "@/lib/navigation";
 
 const focusRing =
@@ -19,6 +20,8 @@ const focusRing =
 // there's nothing to duplicate here beyond theme + sign out.
 function AccountMenu({
   tenantName,
+  avatarUrl,
+  avatarColor,
   align = "left",
   direction = "down",
   open,
@@ -26,6 +29,8 @@ function AccountMenu({
   sidebar = false,
 }: {
   tenantName?: string;
+  avatarUrl?: string | null;
+  avatarColor?: string | null;
   align?: "left" | "right";
   direction?: "down" | "up";
   open: boolean;
@@ -48,15 +53,15 @@ function AccountMenu({
             : `hover:bg-surface-muted ${focusRing}`
         }`}
       >
-        <span
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-            sidebar
-              ? "bg-sidebar-active text-sidebar-foreground"
-              : "bg-primary/10 text-primary"
-          }`}
-        >
-          <User className="h-3.5 w-3.5" />
-        </span>
+        <UserAvatar
+          name={tenantName ?? "Tenant"}
+          url={avatarUrl}
+          color={avatarColor}
+          size={28}
+          className={
+            sidebar ? "ring-1 ring-sidebar-border" : "ring-1 ring-border"
+          }
+        />
         <span className="hidden min-w-0 sm:block">
           <span
             className={`block truncate text-xs font-medium ${
@@ -107,11 +112,15 @@ function AccountMenu({
 export function TenantShell({
   dormName,
   tenantName,
+  avatarUrl,
+  avatarColor,
   pendingMaintenanceCount = 0,
   children,
 }: {
   dormName?: string;
   tenantName?: string;
+  avatarUrl?: string | null;
+  avatarColor?: string | null;
   pendingMaintenanceCount?: number;
   children: React.ReactNode;
 }) {
@@ -130,6 +139,8 @@ export function TenantShell({
     <div className="border-t border-sidebar-border px-3 py-3">
       <AccountMenu
         tenantName={tenantName}
+        avatarUrl={avatarUrl}
+        avatarColor={avatarColor}
         direction="up"
         open={accountOpen}
         onOpenChange={setAccountOpen}
@@ -166,6 +177,8 @@ export function TenantShell({
 
           <AccountMenu
             tenantName={tenantName}
+        avatarUrl={avatarUrl}
+        avatarColor={avatarColor}
             align="right"
             open={accountOpen}
             onOpenChange={setAccountOpen}

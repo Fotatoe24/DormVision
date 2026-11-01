@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { MoreSheet } from "@/components/more-sheet";
 import { BrandMark } from "@/components/brand-mark";
+import { UserAvatar } from "@/components/user-avatar";
 import { adminNavigation, allSecondaryItems } from "@/lib/navigation";
 
 const focusRing =
@@ -17,6 +18,8 @@ const focusRing =
 
 function AccountMenu({
   ownerName,
+  avatarUrl,
+  avatarColor,
   align = "left",
   direction = "down",
   open,
@@ -24,6 +27,8 @@ function AccountMenu({
   sidebar = false,
 }: {
   ownerName?: string;
+  avatarUrl?: string | null;
+  avatarColor?: string | null;
   align?: "left" | "right";
   // "down" (opens below the trigger) suits the mobile header, which
   // sits at the top of the screen. The desktop sidebar footer sits at
@@ -51,15 +56,15 @@ function AccountMenu({
             : `hover:bg-surface-muted ${focusRing}`
         }`}
       >
-        <span
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-            sidebar
-              ? "bg-sidebar-active text-sidebar-foreground"
-              : "bg-primary/10 text-primary"
-          }`}
-        >
-          <User className="h-3.5 w-3.5" />
-        </span>
+        <UserAvatar
+          name={ownerName ?? "Owner"}
+          url={avatarUrl}
+          color={avatarColor}
+          size={28}
+          className={
+            sidebar ? "ring-1 ring-sidebar-border" : "ring-1 ring-border"
+          }
+        />
         <span className="hidden min-w-0 sm:block">
           <span
             className={`block truncate text-xs font-medium ${
@@ -126,12 +131,16 @@ function AccountMenu({
 export function AdminShell({
   dormName,
   ownerName,
+  avatarUrl,
+  avatarColor,
   pendingRequestsCount = 0,
   pendingMaintenanceCount = 0,
   children,
 }: {
   dormName?: string;
   ownerName?: string;
+  avatarUrl?: string | null;
+  avatarColor?: string | null;
   pendingRequestsCount?: number;
   pendingMaintenanceCount?: number;
   children: React.ReactNode;
@@ -164,6 +173,8 @@ export function AdminShell({
     <div className="border-t border-sidebar-border px-3 py-3">
       <AccountMenu
         ownerName={ownerName}
+        avatarUrl={avatarUrl}
+        avatarColor={avatarColor}
         direction="up"
         open={accountOpen}
         onOpenChange={setAccountOpen}
@@ -200,6 +211,8 @@ export function AdminShell({
 
           <AccountMenu
             ownerName={ownerName}
+        avatarUrl={avatarUrl}
+        avatarColor={avatarColor}
             align="right"
             open={accountOpen}
             onOpenChange={setAccountOpen}

@@ -7,6 +7,7 @@ import {
   getDormName,
   getPendingRequestsCount,
   getPendingMaintenanceRequestsCount,
+  getUserAvatar,
 } from "@/lib/shell-data";
 
 export default async function AdminLayout({
@@ -21,12 +22,18 @@ export default async function AdminLayout({
   if (!session) redirect("/");
   if (session.profile?.role !== "owner") redirect("/tenant");
 
-  const [dormName, pendingRequestsCount, pendingMaintenanceCount, appearance] =
-    await Promise.all([
+  const [
+    dormName,
+    pendingRequestsCount,
+    pendingMaintenanceCount,
+    appearance,
+    avatar,
+  ] = await Promise.all([
       getDormName(session.profile.dorm_id),
       getPendingRequestsCount(session.profile.dorm_id),
       getPendingMaintenanceRequestsCount(session.profile.dorm_id),
       getSavedAppearance(session.user.id),
+      getUserAvatar(session.user.id),
     ]);
 
   return (
@@ -35,6 +42,8 @@ export default async function AdminLayout({
       <AdminShell
         dormName={dormName}
         ownerName={session.profile.full_name}
+        avatarUrl={avatar.avatarUrl}
+        avatarColor={avatar.avatarColor}
         pendingRequestsCount={pendingRequestsCount}
         pendingMaintenanceCount={pendingMaintenanceCount}
       >

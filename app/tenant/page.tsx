@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantAccessState } from "@/lib/tenant-status";
 import { RegistrationStatus } from "@/components/registration-status";
 import { getNotificationSettings } from "@/lib/notification-settings";
+import { UserAvatar } from "@/components/user-avatar";
 import {
   billStatusStyles,
   formatMoney,
@@ -132,6 +133,23 @@ export default async function TenantPage({
         .eq("status", "active")
         .neq("profile_id", session.user.id)
     : { data: [] };
+
+  // Their display photos / avatar colors. Only roommates in this tenant's own
+  // room are looked up, and they already see each other's names here.
+  const roommateProfileIds = (roommates ?? [])
+    .map((r) => r.profile_id)
+    .filter((id): id is string => Boolean(id));
+
+  const { data: roommateUsers } = roommateProfileIds.length
+    ? await supabase
+        .from("users")
+        .select("id, avatar_url, avatar_color")
+        .in("id", roommateProfileIds)
+    : { data: [] };
+
+  const roommateAvatar = new Map(
+    (roommateUsers ?? []).map((u) => [u.id, u])
+  );
 
   // ---------------------------------------------------------
   // Water & electricity bills for my room -- visible to every
@@ -526,8 +544,14 @@ export default async function TenantPage({
                     {roommates.map((r) => (
                       <span
                         key={r.id}
-                        className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted py-0.5 pl-0.5 pr-2.5 text-xs"
                       >
+                        <UserAvatar
+                          name={r.full_name}
+                          url={roommateAvatar.get(r.profile_id)?.avatar_url}
+                          color={roommateAvatar.get(r.profile_id)?.avatar_color}
+                          size={24}
+                        />
                         {r.full_name}
                       </span>
                     ))}

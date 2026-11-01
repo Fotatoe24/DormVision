@@ -7,6 +7,7 @@ import { getSavedAppearance } from "@/lib/appearance";
 import {
   getDormName,
   getMyPendingMaintenanceRequestsCount,
+  getUserAvatar,
 } from "@/lib/shell-data";
 
 export default async function TenantLayout({
@@ -28,10 +29,12 @@ export default async function TenantLayout({
       ? tenancy.dorm_id
       : session.profile?.dorm_id;
 
-  const [dormName, pendingMaintenanceCount, appearance] = await Promise.all([
+  const [dormName, pendingMaintenanceCount, appearance, avatar] =
+    await Promise.all([
     getDormName(shellDormId),
     getMyPendingMaintenanceRequestsCount(session.user.id),
     getSavedAppearance(session.user.id),
+    getUserAvatar(session.user.id),
   ]);
 
   return (
@@ -40,6 +43,8 @@ export default async function TenantLayout({
       <TenantShell
         dormName={dormName}
         tenantName={session.profile?.full_name}
+        avatarUrl={avatar.avatarUrl}
+        avatarColor={avatar.avatarColor}
         pendingMaintenanceCount={pendingMaintenanceCount}
       >
         {children}

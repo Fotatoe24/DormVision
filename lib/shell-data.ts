@@ -95,3 +95,27 @@ export async function getGraceDays(dormId: string) {
     .maybeSingle();
   return data?.grace_period_days ?? 0;
 }
+
+// The signed-in user's display photo and avatar color, for the account row in
+// the sidebar. Loaded separately from the session (the login token doesn't
+// carry it) and never throws: no photo simply means initials are shown.
+export async function getUserAvatar(userId: string | null | undefined) {
+  const none = { avatarUrl: null as string | null, avatarColor: null as string | null };
+  if (!userId) return none;
+
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from("users")
+      .select("avatar_url, avatar_color")
+      .eq("id", userId)
+      .maybeSingle();
+
+    return {
+      avatarUrl: (data?.avatar_url as string | null) ?? null,
+      avatarColor: (data?.avatar_color as string | null) ?? null,
+    };
+  } catch {
+    return none;
+  }
+}
