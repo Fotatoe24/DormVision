@@ -17,6 +17,13 @@ import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { toDateString } from "@/lib/billing";
 import { friendlyError } from "@/lib/errors";
+import {
+  beginLoginAttempt,
+  clearLoginAttempts,
+  invalidCredentialsMessage,
+  lockedMessage,
+  recordFailedLogin,
+} from "@/lib/login-lockout";
 import { getCurrentTenancy } from "@/lib/tenant-status";
 import {
   notifyOwnerMaintenanceRequest,
@@ -86,21 +93,47 @@ export async function login(formData: FormData) {
 
   const admin = createAdminClient();
 
+  // Lockout: 3 wrong tries lock this email for 5 minutes (migration 0021).
+  // The attempt is counted BEFORE the password is checked, so a burst of
+  // parallel guesses can't all get through. It applies to any email, real or
+  // not, so the response never reveals whether an account exists.
+  const gate = await beginLoginAttempt(admin, email);
+
+  if (gate.locked) {
+    redirect("/?error=" + encodeURIComponent(lockedMessage(gate.retryAfterSeconds)));
+  }
+
+  if (gate.failed) {
+    redirect(
+      "/?error=" +
+        encodeURIComponent("We couldn't sign you in right now. Please try again.")
+    );
+  }
+
   const { data: user } = await admin
     .from("users")
     .select("id, email, full_name, role, dorm_id, password_hash")
     .eq("email", email)
     .maybeSingle();
 
-  if (!user || !user.password_hash) {
-    redirect("/?error=" + encodeURIComponent("Invalid email or password."));
+  const valid = user?.password_hash
+    ? await verifyPassword(password, user.password_hash)
+    : false;
+
+  if (!user || !valid) {
+    const failure = await recordFailedLogin(admin, email);
+
+    redirect(
+      "/?error=" +
+        encodeURIComponent(
+          failure.locked
+            ? lockedMessage(failure.retryAfterSeconds)
+            : invalidCredentialsMessage(failure.attemptsLeft)
+        )
+    );
   }
 
-  const valid = await verifyPassword(password, user.password_hash);
-
-  if (!valid) {
-    redirect("/?error=" + encodeURIComponent("Invalid email or password."));
-  }
+  await clearLoginAttempts(admin, email);
 
   const token = await createSessionToken({
     id: user.id,
