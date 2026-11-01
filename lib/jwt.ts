@@ -21,6 +21,9 @@ export interface SessionPayload {
   fullName: string;
   role: "owner" | "tenant";
   dormId: string | null;
+  // Id of the server-side session this cookie belongs to (user_sessions,
+  // migration 0022). Absent on cookies from before that existed.
+  sid?: string;
 }
 
 export const AUTH_COOKIE_NAME = "dormvision-token";

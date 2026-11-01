@@ -3,6 +3,7 @@ import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentTenancy } from "@/lib/tenant-status";
 import { friendlyError } from "@/lib/errors";
+import { revokeUserSessions } from "@/lib/session-store";
 import { imageExtension, sniffImageType } from "@/lib/image-files";
 
 const BUCKET_NAME = "avatars";
@@ -270,6 +271,10 @@ export async function PATCH(request: Request) {
     if (updateError) {
       return NextResponse.json({ error: friendlyError(updateError) }, { status: 400 });
     }
+
+    // Every OTHER device signed in with the old password is signed out; this
+    // one stays, so the person isn't bounced from the page they just used.
+    await revokeUserSessions(admin, session.user.id, session.sid);
 
     return NextResponse.json({
       ok: true,

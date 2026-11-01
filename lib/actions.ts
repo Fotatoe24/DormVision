@@ -10,8 +10,11 @@ import {
   hashPassword,
   verifyPassword,
   createSessionToken,
+  issueSession,
   AUTH_COOKIE_NAME,
 } from "@/lib/auth";
+import { verifySessionToken } from "@/lib/jwt";
+import { revokeSession, revokeUserSessions } from "@/lib/session-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
@@ -44,6 +47,26 @@ import {
 // ============================================================
 
 const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days, matches the JWT's own expiry
+
+// Starts a server-side session for someone who has just proven who they are.
+// If that can't be recorded, the account (or password) change that came
+// before it has still happened, so send them back to sign in rather than
+// leaving them on an error page.
+async function startSession(
+  payload: Parameters<typeof issueSession>[0],
+  fallbackPath: string
+) {
+  try {
+    return await issueSession(payload);
+  } catch (error) {
+    console.error("Could not start a session:", error);
+    redirect(
+      fallbackPath +
+        "?error=" +
+        encodeURIComponent("We couldn't sign you in right now. Please try again.")
+    );
+  }
+}
 
 async function setSessionCookie(token: string) {
   const cookieStore = await cookies();
@@ -135,13 +158,16 @@ export async function login(formData: FormData) {
 
   await clearLoginAttempts(admin, email);
 
-  const token = await createSessionToken({
-    id: user.id,
-    email: user.email,
-    fullName: user.full_name,
-    role: user.role,
-    dormId: user.dorm_id,
-  });
+  const token = await startSession(
+    {
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      role: user.role,
+      dormId: user.dorm_id,
+    },
+    "/"
+  );
 
   await setSessionCookie(token);
 
@@ -150,6 +176,16 @@ export async function login(formData: FormData) {
 
 export async function logout() {
   const cookieStore = await cookies();
+
+  // Deleting the cookie only signs this browser out; anyone holding a copy of
+  // it would still be signed in. End the session on the server too.
+  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  const payload = token ? await verifySessionToken(token) : null;
+
+  if (payload?.sid) {
+    await revokeSession(createAdminClient(), payload.sid);
+  }
+
   cookieStore.delete(AUTH_COOKIE_NAME);
 
   redirect("/");
@@ -279,13 +315,20 @@ export async function resetPassword(formData: FormData) {
     );
   }
 
-  const sessionToken = await createSessionToken({
-    id: user.id,
-    email: user.email,
-    fullName: user.full_name,
-    role: user.role,
-    dormId: user.dorm_id,
-  });
+  // Whoever else was signed in as this account (including anyone who knew the
+  // old password) is signed out; only the session started below survives.
+  await revokeUserSessions(admin, user.id);
+
+  const sessionToken = await startSession(
+    {
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      role: user.role,
+      dormId: user.dorm_id,
+    },
+    "/"
+  );
 
   await setSessionCookie(sessionToken);
 
@@ -365,13 +408,16 @@ export async function signUpOwner(formData: FormData) {
 
   const dormId = rpcResult[0].out_dorm_id as string;
 
-  const token = await createSessionToken({
-    id: userId,
-    email,
-    fullName,
-    role: "owner",
-    dormId,
-  });
+  const token = await startSession(
+    {
+      id: userId,
+      email,
+      fullName,
+      role: "owner",
+      dormId,
+    },
+    "/"
+  );
 
   await setSessionCookie(token);
 
@@ -512,13 +558,16 @@ export async function signUpTenant(formData: FormData) {
     notifyOwnerNewRegistration(origin, dormId, fullName)
   );
 
-  const token = await createSessionToken({
-    id: userId,
-    email,
-    fullName,
-    role: "tenant",
-    dormId,
-  });
+  const token = await startSession(
+    {
+      id: userId,
+      email,
+      fullName,
+      role: "tenant",
+      dormId,
+    },
+    "/"
+  );
 
   await setSessionCookie(token);
 
@@ -888,6 +937,8 @@ export async function submitRegistrationRequest(formData: FormData) {
       fullName: session.profile.full_name,
       role: session.profile.role,
       dormId,
+      // Same session, new dorm: keep the id so it isn't treated as a new login.
+      ...(session.sid ? { sid: session.sid } : {}),
     })
   );
 
