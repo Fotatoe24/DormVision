@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentTenancy } from "@/lib/tenant-status";
+import { friendlyError } from "@/lib/errors";
 import { imageExtension, sniffImageType } from "@/lib/image-files";
 
 const BUCKET_NAME = "avatars";
@@ -101,7 +102,7 @@ export async function PATCH(request: Request) {
       // Clean up uploaded file if DB update failed.
       await admin.storage.from(BUCKET_NAME).remove([filePath]);
 
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      return NextResponse.json({ error: friendlyError(updateError) }, { status: 400 });
     }
 
     // Only now that the new photo is live, remove the previous ones (the old
@@ -211,7 +212,7 @@ export async function PATCH(request: Request) {
       .eq("id", session.user.id);
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      return NextResponse.json({ error: friendlyError(updateError) }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -267,7 +268,7 @@ export async function PATCH(request: Request) {
       .eq("id", session.user.id);
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      return NextResponse.json({ error: friendlyError(updateError) }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -318,7 +319,7 @@ export async function PATCH(request: Request) {
       .eq("id", tenancy.id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: friendlyError(error) }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -357,7 +358,7 @@ export async function PATCH(request: Request) {
     .eq("id", session.user.id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: friendlyError(error) }, { status: 400 });
   }
 
   return NextResponse.json({

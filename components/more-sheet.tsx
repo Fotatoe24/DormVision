@@ -65,7 +65,7 @@ export function MoreSheet({
           {groups.map((group, i) => (
             <div key={group.label ?? i} className={i > 0 ? "mt-4" : undefined}>
               {group.label && (
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted/70">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground-muted/70">
                   {group.label}
                 </p>
               )}
@@ -92,7 +92,7 @@ export function MoreSheet({
                       {item.label}
                       {badgeCount > 0 && (
                         <span
-                          className="absolute right-2 top-2 rounded-full bg-status-overdue px-1.5 py-0.5 text-[10px] font-semibold leading-none text-surface"
+                          className="absolute right-2 top-2 rounded-full bg-status-overdue px-1.5 py-0.5 text-[11px] font-semibold leading-none text-surface"
                           aria-label={`${badgeCount} pending`}
                         >
                           {badgeCount}

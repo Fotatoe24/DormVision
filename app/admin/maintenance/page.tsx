@@ -90,7 +90,7 @@ export default async function MaintenancePage({
   const requestRows = (requests as RequestRow[] | null) ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-3xl">
       <div className="mb-6">
         <h1 className="font-heading text-lg font-semibold text-primary">
           Maintenance requests

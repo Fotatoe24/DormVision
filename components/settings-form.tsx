@@ -160,7 +160,7 @@ export default function SettingsForm({ dorm, settings }: Props) {
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
 
-            <p className="mt-1 text-[11px] text-foreground-muted">
+            <p className="mt-1 text-xs text-foreground-muted">
               Day of the month.
             </p>
           </div>
@@ -178,7 +178,7 @@ export default function SettingsForm({ dorm, settings }: Props) {
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
 
-            <p className="mt-1 text-[11px] text-foreground-muted">
+            <p className="mt-1 text-xs text-foreground-muted">
               Number of days after the due date.
             </p>
           </div>
@@ -197,7 +197,7 @@ export default function SettingsForm({ dorm, settings }: Props) {
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
 
-            <p className="mt-1 text-[11px] text-foreground-muted">
+            <p className="mt-1 text-xs text-foreground-muted">
               Amount in Philippine pesos.
             </p>
           </div>

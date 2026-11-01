@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -64,11 +65,10 @@ export default async function TenantsPage({
   const { data: allTenants, error: tenantsError } = await query;
 
   if (tenantsError) {
+    console.error("Could not load tenants:", tenantsError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load tenants: {tenantsError.message}
-        </div>
+        <LoadError what="tenants" />
       </div>
     );
   }
@@ -83,11 +83,10 @@ export default async function TenantsPage({
     : { data: [], error: null };
 
   if (billsError) {
+    console.error("Could not load bills:", billsError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load bills: {billsError.message}
-        </div>
+        <LoadError what="bills" />
       </div>
     );
   }
@@ -140,11 +139,10 @@ export default async function TenantsPage({
     : { data: [], error: null };
 
   if (roomsError) {
+    console.error("Could not load rooms:", roomsError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load rooms: {roomsError.message}
-        </div>
+        <LoadError what="rooms" />
       </div>
     );
   }

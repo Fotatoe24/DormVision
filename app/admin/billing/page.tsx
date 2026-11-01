@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -122,12 +123,11 @@ export default async function BillingPage({
     null;
 
   if (loadError) {
+    console.error("Could not load billing data:", loadError);
     return (
       <main className="flex-1 bg-background px-6 py-10 text-foreground">
         <div className="mx-auto max-w-3xl">
-          <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-            Could not load billing data: {loadError}
-          </div>
+          <LoadError what="billing data" />
         </div>
       </main>
     );

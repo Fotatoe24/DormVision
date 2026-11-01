@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -207,11 +208,10 @@ export default async function ExpensesPage({
     null;
 
   if (loadError) {
+    console.error("Could not load income & expenses:", loadError);
     return (
       <div className="mx-auto max-w-5xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load income & expenses: {loadError}
-        </div>
+        <LoadError what="income & expenses" />
       </div>
     );
   }

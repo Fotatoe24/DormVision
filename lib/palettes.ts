@@ -34,7 +34,7 @@ export const PALETTES: Palette[] = [
     label: "Ledger Teal",
     blurb: "The classic DormVision look.",
     swatch: {
-      light: ["#0c9488", "#0f3657", "#022B47"],
+      light: ["#0a786e", "#0f3657", "#022B47"],
       dark: ["#22c7b4", "#5fb3e0", "#0c2c46"],
     },
   },
@@ -43,7 +43,7 @@ export const PALETTES: Palette[] = [
     label: "Ocean Blue",
     blurb: "Crisp and calm.",
     swatch: {
-      light: ["#2563eb", "#1e3a8a", "#0f2a5c"],
+      light: ["#2060eb", "#1e3a8a", "#0f2a5c"],
       dark: ["#60a5fa", "#93c5fd", "#111c3a"],
     },
   },
@@ -61,7 +61,7 @@ export const PALETTES: Palette[] = [
     label: "Rose",
     blurb: "Warm and friendly.",
     swatch: {
-      light: ["#e11d48", "#881337", "#4c0519"],
+      light: ["#cd1a41", "#881337", "#4c0519"],
       dark: ["#fb7185", "#fda4af", "#2a1119"],
     },
   },
@@ -70,7 +70,7 @@ export const PALETTES: Palette[] = [
     label: "Brass",
     blurb: "Earthy, like a ledger book.",
     swatch: {
-      light: ["#b45309", "#78350f", "#3b2410"],
+      light: ["#ad5009", "#78350f", "#3b2410"],
       dark: ["#f59e0b", "#fcd34d", "#2a1e0e"],
     },
   },
@@ -79,7 +79,7 @@ export const PALETTES: Palette[] = [
     label: "Forest",
     blurb: "Fresh and easy on the eyes.",
     swatch: {
-      light: ["#15803d", "#14532d", "#052e16"],
+      light: ["#147c3b", "#14532d", "#052e16"],
       dark: ["#4ade80", "#86efac", "#0e2417"],
     },
   },

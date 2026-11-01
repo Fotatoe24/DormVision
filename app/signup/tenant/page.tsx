@@ -97,7 +97,7 @@ export default function TenantSignUpPage() {
               className={inputClass}
               ariaDescribedBy="password-hint"
             />
-            <p id="password-hint" className="mt-1.5 text-[11px] text-foreground-muted">
+            <p id="password-hint" className="mt-1.5 text-xs text-foreground-muted">
               At least 6 characters.
             </p>
           </div>

@@ -56,7 +56,7 @@ export function BottomNav({
               key={item.key}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] transition-colors ${
+              className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-1.5 text-xs transition-colors ${
                 active ? "text-primary" : "text-foreground-muted"
               }`}
             >
@@ -79,7 +79,7 @@ export function BottomNav({
             onClick={onMoreClick}
             aria-haspopup="dialog"
             aria-current={moreActive ? "page" : undefined}
-            className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] transition-colors ${
+            className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-1.5 text-xs transition-colors ${
               moreActive ? "text-primary" : "text-foreground-muted"
             }`}
           >

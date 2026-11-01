@@ -217,9 +217,9 @@ export default async function TenantBillingPage({
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="font-heading text-sm font-semibold text-foreground">
+        <h1 className="font-heading text-sm font-semibold text-foreground">
           Billing
-        </p>
+        </h1>
 
         {(pastStaysCount ?? 0) > 0 && (
           <Link

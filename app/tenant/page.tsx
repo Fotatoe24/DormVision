@@ -221,7 +221,7 @@ export default async function TenantPage({
     <div className="mx-auto max-w-4xl">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
             Dashboard
           </p>
           <h1 className="mt-1 font-heading text-2xl font-bold text-foreground">
@@ -371,7 +371,7 @@ export default async function TenantPage({
             {latestPayment ? formatMoney(latestPayment.amount) : "—"}
           </p>
           {latestPayment && (
-            <span className="mt-1.5 inline-block rounded-full bg-status-paid/15 px-2 py-0.5 text-[11px] font-medium text-status-paid">
+            <span className="mt-1.5 inline-block rounded-full bg-status-paid/15 px-2 py-0.5 text-xs font-medium text-status-paid">
               Confirmed
             </span>
           )}
@@ -429,7 +429,7 @@ export default async function TenantPage({
                     <p className="font-mono text-sm font-medium text-foreground">
                       {formatMoney(p.amount)}
                     </p>
-                    <span className="mt-0.5 inline-block rounded-full bg-status-paid/15 px-2 py-0.5 text-[11px] font-medium text-status-paid">
+                    <span className="mt-0.5 inline-block rounded-full bg-status-paid/15 px-2 py-0.5 text-xs font-medium text-status-paid">
                       Confirmed
                     </span>
                   </div>

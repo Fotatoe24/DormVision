@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -52,11 +53,10 @@ export default async function PaymentsPage({
     .eq("dorm_id", dormId);
 
   if (tenantsError) {
+    console.error("Could not load payments:", tenantsError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load payments: {tenantsError.message}
-        </div>
+        <LoadError what="payments" />
       </div>
     );
   }
@@ -100,11 +100,10 @@ export default async function PaymentsPage({
       : { data: [], count: 0, error: null };
 
   if (paymentsError) {
+    console.error("Could not load payments:", paymentsError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load payments: {paymentsError.message}
-        </div>
+        <LoadError what="payments" />
       </div>
     );
   }

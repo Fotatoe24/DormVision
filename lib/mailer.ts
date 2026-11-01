@@ -86,7 +86,7 @@ export async function sendNotificationEmail({
     .join("");
 
   const button = cta
-    ? `<a href="${escapeHtml(cta.url)}" style="display: inline-block; margin-top: 10px; background: #0c9488; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">${escapeHtml(cta.label)}</a>`
+    ? `<a href="${escapeHtml(cta.url)}" style="display: inline-block; margin-top: 10px; background: #0a786e; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">${escapeHtml(cta.label)}</a>`
     : "";
 
   await transporter.sendMail({
@@ -97,7 +97,7 @@ export async function sendNotificationEmail({
     html: `
       <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; color: #1b1f1d;">
         <div style="margin-bottom: 28px;">
-          <span style="font-size: 18px; font-weight: 600; color: #0c9488;">DormVision</span>
+          <span style="font-size: 18px; font-weight: 600; color: #0a786e;">DormVision</span>
         </div>
         <h2 style="font-size: 20px; font-weight: 600; margin: 0 0 14px; color: #1b1f1d;">${escapeHtml(heading)}</h2>
         ${body}

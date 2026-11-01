@@ -7,6 +7,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/password-input";
 import { AppearanceSettings } from "@/components/appearance-settings";
+import { readableTextOn } from "@/lib/avatar-color";
 import { logout } from "@/lib/actions";
 import { ArrowLeft } from "lucide-react";
 
@@ -360,9 +361,10 @@ export function ProfileView({ user }: { user: ProfileUser }) {
             />
           ) : (
             <span
-              className="grid h-16 w-16 place-items-center rounded-full text-lg font-bold text-surface"
+              className="grid h-16 w-16 place-items-center rounded-full text-lg font-bold"
               style={{
                 background: avatarColor,
+                color: readableTextOn(avatarColor),
               }}
             >
               {initials(fullName)}

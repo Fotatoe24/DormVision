@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -75,11 +76,10 @@ export default async function TenantRequestsPage({
   const loadError = pendingError?.message || reviewedError?.message || null;
 
   if (loadError) {
+    console.error("Could not load registration requests:", loadError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load registration requests: {loadError}
-        </div>
+        <LoadError what="registration requests" />
       </div>
     );
   }
@@ -188,7 +188,7 @@ export default async function TenantRequestsPage({
                     </p>
                     <label
                       htmlFor={`reason-${r.id}`}
-                      className="mb-1 block text-[11px] font-medium text-foreground-muted"
+                      className="mb-1 block text-xs font-medium text-foreground-muted"
                     >
                       Reason (optional, shown to the applicant)
                     </label>

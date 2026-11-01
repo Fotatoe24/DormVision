@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentTenancy } from "@/lib/tenant-status";
+import { friendlyError } from "@/lib/errors";
 import { notifyOwnerPaymentReported } from "@/lib/notifications";
 import {
   MAX_PROOF_BYTES,
@@ -140,8 +141,10 @@ export async function POST(request: Request) {
       );
     }
     return fail(
-      "Could not submit payment report: " +
-        (insertError?.message ?? "unknown error"),
+      friendlyError(
+        insertError,
+        "Could not submit your payment report. Please try again."
+      ),
       500
     );
   }

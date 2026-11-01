@@ -24,9 +24,13 @@ export function IncomeExpenseChart({
 }: {
   data: { label: string; income: number; expenses: number }[];
 }) {
-  const width = 600;
-  const height = 220;
-  const padding = { top: 16, right: 12, bottom: 24, left: 44 };
+  // Drawn in a 360-unit space on purpose: the SVG is scaled to fit its card,
+  // so in a 600-unit space a 9px label rendered at about 4-5px on a phone.
+  // At 360 the text lands close to its real size on phones and grows a bit
+  // on desktop.
+  const width = 360;
+  const height = 200;
+  const padding = { top: 16, right: 12, bottom: 26, left: 52 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
@@ -89,7 +93,7 @@ export function IncomeExpenseChart({
               y={y(tick)}
               textAnchor="end"
               dominantBaseline="middle"
-              className="fill-foreground-muted text-[9px]"
+              className="fill-foreground-muted text-[11px]"
             >
               {compactMoney(tick)}
             </text>
@@ -104,7 +108,7 @@ export function IncomeExpenseChart({
             x={x(i)}
             y={height - 6}
             textAnchor={i === 0 ? "start" : i === lastIndex ? "end" : "middle"}
-            className="fill-foreground-muted text-[9px]"
+            className="fill-foreground-muted text-[11px]"
           >
             {d.label}
           </text>
@@ -148,7 +152,7 @@ export function IncomeExpenseChart({
               x={x(lastIndex) - 8}
               y={y(data[lastIndex].expenses) - 8}
               textAnchor="end"
-              className="fill-status-overdue text-[10px] font-medium"
+              className="fill-status-overdue text-[11px] font-medium"
             >
               {compactMoney(data[lastIndex].expenses)}
             </text>
@@ -159,7 +163,7 @@ export function IncomeExpenseChart({
               x={x(lastIndex) - 8}
               y={y(data[lastIndex].income) - 8}
               textAnchor="end"
-              className="fill-status-paid text-[10px] font-medium"
+              className="fill-status-paid text-[11px] font-medium"
             >
               {compactMoney(data[lastIndex].income)}
             </text>

@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -113,11 +114,10 @@ export default async function MonitoringPage() {
   const loadError = roomsError?.message || tenantsError?.message || billsError?.message || null;
 
   if (loadError) {
+    console.error("Could not load monitoring data:", loadError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load monitoring data: {loadError}
-        </div>
+        <LoadError what="monitoring data" />
       </div>
     );
   }

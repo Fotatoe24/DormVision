@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { readableTextOn } from "@/lib/avatar-color";
 
 function initialsOf(name: string) {
   return name
@@ -51,10 +52,11 @@ export function UserAvatar({
   return (
     <span
       aria-hidden
-      className={`flex shrink-0 select-none items-center justify-center rounded-full font-semibold text-white ${className}`}
+      className={`flex shrink-0 select-none items-center justify-center rounded-full font-semibold ${className}`}
       style={{
         ...box,
-        background: color || "#0c9488",
+        background: color || "#0a786e",
+        color: readableTextOn(color || "#0a786e"),
         fontSize: Math.max(10, Math.round(size * 0.4)),
       }}
     >

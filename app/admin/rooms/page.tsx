@@ -1,3 +1,4 @@
+import { LoadError } from "@/components/load-error";
 import { EmptyState } from "@/components/empty-state";
 import { BedDouble } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
@@ -85,11 +86,10 @@ export default async function RoomsPage({
     null;
 
   if (loadError) {
+    console.error("Could not load rooms:", loadError);
     return (
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-lg border border-status-overdue/30 bg-status-overdue/10 px-4 py-3 text-sm text-status-overdue">
-          Could not load rooms: {loadError}
-        </div>
+        <LoadError what="rooms" />
       </div>
     );
   }
@@ -417,7 +417,7 @@ export default async function RoomsPage({
                     />
                   </div>
                   {occupants.length > 0 && (
-                    <p className="text-[11px] text-foreground-muted">
+                    <p className="text-xs text-foreground-muted">
                       This room currently has {occupants.length} occupant(s).
                       Capacity can&apos;t be reduced below that.
                     </p>

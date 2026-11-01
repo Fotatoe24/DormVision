@@ -556,7 +556,7 @@ export default async function AdminPage() {
           <p className="font-heading text-xl font-semibold text-foreground">
             {totalRooms}
           </p>
-          <p className="text-[11px] text-foreground-muted">
+          <p className="text-xs text-foreground-muted">
             {occupiedRooms} occupied
           </p>
         </div>
@@ -569,7 +569,7 @@ export default async function AdminPage() {
           <p className="font-heading text-xl font-semibold text-foreground">
             {activeTenants.length}
           </p>
-          <p className="text-[11px] text-foreground-muted">
+          <p className="text-xs text-foreground-muted">
             {newActiveThisMonth > 0 ? `+${newActiveThisMonth} this month` : " "}
           </p>
         </div>
@@ -582,7 +582,7 @@ export default async function AdminPage() {
           <p className="font-mono text-xl font-semibold text-status-paid">
             {formatMoney(monthlyRevenue)}
           </p>
-          <p className="text-[11px] text-foreground-muted">This month</p>
+          <p className="text-xs text-foreground-muted">This month</p>
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-4">
@@ -597,7 +597,7 @@ export default async function AdminPage() {
           >
             {formatMoney(outstandingTotal)}
           </p>
-          <p className="text-[11px] text-foreground-muted">Outstanding</p>
+          <p className="text-xs text-foreground-muted">Outstanding</p>
         </div>
       </div>
 

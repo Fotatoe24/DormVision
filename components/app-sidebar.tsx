@@ -58,7 +58,7 @@ export function AppSidebar({
             className={i > 0 ? "mt-4" : undefined}
           >
             {group.label && (
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">
+              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted">
                 {group.label}
               </p>
             )}
@@ -88,7 +88,7 @@ export function AppSidebar({
                       </span>
                       {badgeCount > 0 && (
                         <span
-                          className="rounded-full bg-status-overdue px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+                          className="rounded-full bg-status-overdue px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
                           aria-label={`${badgeCount} pending`}
                         >
                           {badgeCount}

@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { toDateString } from "@/lib/billing";
+import { friendlyError } from "@/lib/errors";
 import { getCurrentTenancy } from "@/lib/tenant-status";
 import {
   notifyOwnerMaintenanceRequest,
@@ -241,7 +242,7 @@ export async function resetPassword(formData: FormData) {
 
   if (updateError) {
     redirect(
-      "/reset-password?error=" + encodeURIComponent(updateError.message)
+      "/reset-password?error=" + encodeURIComponent(friendlyError(updateError))
     );
   }
 
@@ -321,8 +322,10 @@ export async function signUpOwner(formData: FormData) {
     redirect(
       "/signup?error=" +
         encodeURIComponent(
-          "Could not create owner account: " +
-            (createError?.message ?? "unknown error")
+          friendlyError(
+            createError,
+            "Could not create your owner account. Please try again."
+          )
         )
     );
   }
@@ -443,7 +446,7 @@ export async function signUpTenant(formData: FormData) {
     redirect(
       "/signup/tenant?error=" +
         encodeURIComponent(
-          "Could not create your account: " + userError.message
+          friendlyError(userError, "Could not create your account. Please try again.")
         )
     );
   }
@@ -467,7 +470,7 @@ export async function signUpTenant(formData: FormData) {
     redirect(
       "/signup/tenant?error=" +
         encodeURIComponent(
-          "Could not submit your registration: " + requestError.message
+          friendlyError(requestError, "Could not submit your registration. Please try again.")
         )
     );
   }
@@ -595,7 +598,7 @@ export async function approveRegistrationRequest(formData: FormData) {
   if (tenantError) {
     redirect(
       "/admin/tenant-requests?error=" +
-        encodeURIComponent("Could not create tenant: " + tenantError.message)
+        encodeURIComponent(friendlyError(tenantError, "Could not create tenant. Please try again."))
     );
   }
 
@@ -610,7 +613,7 @@ export async function approveRegistrationRequest(formData: FormData) {
 
   if (updateError) {
     redirect(
-      "/admin/tenant-requests?error=" + encodeURIComponent(updateError.message)
+      "/admin/tenant-requests?error=" + encodeURIComponent(friendlyError(updateError))
     );
   }
 
@@ -655,7 +658,7 @@ export async function rejectRegistrationRequest(formData: FormData) {
 
   if (error) {
     redirect(
-      "/admin/tenant-requests?error=" + encodeURIComponent(error.message)
+      "/admin/tenant-requests?error=" + encodeURIComponent(friendlyError(error))
     );
   }
 
@@ -708,7 +711,7 @@ export async function cancelRegistrationRequest(formData: FormData) {
     .eq("status", "pending");
 
   if (error) {
-    redirect("/tenant?error=" + encodeURIComponent(error.message));
+    redirect("/tenant?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   revalidatePath("/tenant");
@@ -830,7 +833,7 @@ export async function submitRegistrationRequest(formData: FormData) {
     redirect(
       "/tenant?error=" +
         encodeURIComponent(
-          "Could not submit your request: " + insertError.message
+          friendlyError(insertError, "Could not submit your request. Please try again.")
         )
     );
   }
@@ -896,7 +899,7 @@ export async function updateTenantProfile(formData: FormData) {
     .eq("id", session.user.id);
 
   if (error) {
-    redirect("/tenant?error=" + encodeURIComponent(error.message));
+    redirect("/tenant?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   revalidatePath("/tenant");
@@ -1023,7 +1026,7 @@ export async function createRoom(formData: FormData) {
   });
 
   if (error) {
-    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+    redirect("/admin/rooms?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   revalidatePath("/admin/rooms");
@@ -1052,7 +1055,7 @@ export async function updateRoomStatus(formData: FormData) {
     .select("id");
 
   if (error) {
-    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+    redirect("/admin/rooms?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   if (!data || data.length === 0) {
@@ -1098,7 +1101,7 @@ export async function deleteRoom(formData: FormData) {
     .select("id");
 
   if (error) {
-    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+    redirect("/admin/rooms?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   if (!data || data.length === 0) {
@@ -1178,7 +1181,7 @@ export async function assignTenantToRoom(formData: FormData) {
 
   if (tenantSyncError) {
     redirect(
-      "/admin/rooms?error=" + encodeURIComponent(tenantSyncError.message)
+      "/admin/rooms?error=" + encodeURIComponent(friendlyError(tenantSyncError))
     );
   }
 
@@ -1240,7 +1243,7 @@ export async function removeTenantFromRoom(formData: FormData) {
 
   if (tenantSyncError) {
     redirect(
-      "/admin/rooms?error=" + encodeURIComponent(tenantSyncError.message)
+      "/admin/rooms?error=" + encodeURIComponent(friendlyError(tenantSyncError))
     );
   }
 
@@ -1368,7 +1371,7 @@ export async function transferTenant(formData: FormData) {
       "/admin/tenants/" +
         tenant.id +
         "?error=" +
-        encodeURIComponent("Could not transfer tenant: " + updateError.message)
+        encodeURIComponent(friendlyError(updateError, "Could not transfer tenant. Please try again."))
     );
   }
 
@@ -1446,7 +1449,7 @@ export async function moveOutTenant(formData: FormData) {
       "/admin/tenants/" +
         tenant.id +
         "?error=" +
-        encodeURIComponent("Could not move out tenant: " + updateError.message)
+        encodeURIComponent(friendlyError(updateError, "Could not move out tenant. Please try again."))
     );
   }
 
@@ -1534,7 +1537,7 @@ export async function reactivateTenant(formData: FormData) {
         tenant.id +
         "?error=" +
         encodeURIComponent(
-          "Could not reactivate tenant: " + updateError.message
+          friendlyError(updateError, "Could not reactivate tenant. Please try again.")
         )
     );
   }
@@ -1588,7 +1591,7 @@ export async function deactivateRoom(formData: FormData) {
     .select("id");
 
   if (error) {
-    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+    redirect("/admin/rooms?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   if (!data || data.length === 0) {
@@ -1622,7 +1625,7 @@ export async function reactivateRoom(formData: FormData) {
     .select("id");
 
   if (error) {
-    redirect("/admin/rooms?error=" + encodeURIComponent(error.message));
+    redirect("/admin/rooms?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   if (!data || data.length === 0) {
@@ -1699,7 +1702,7 @@ export async function updateRoom(formData: FormData) {
   if (error) {
     redirect(
       "/admin/rooms?error=" +
-        encodeURIComponent("Could not update room: " + error.message)
+        encodeURIComponent(friendlyError(error, "Could not update room. Please try again."))
     );
   }
 
@@ -1783,7 +1786,7 @@ export async function generateMonthlyBills() {
   if (tenantsError) {
     redirect(
       "/admin/billing?error=" +
-        encodeURIComponent("Could not load tenants: " + tenantsError.message)
+        encodeURIComponent(friendlyError(tenantsError, "Could not load tenants. Please try again."))
     );
   }
 
@@ -1822,7 +1825,7 @@ export async function generateMonthlyBills() {
     redirect(
       "/admin/billing?error=" +
         encodeURIComponent(
-          "Could not check existing bills: " + existingBillsError.message
+          friendlyError(existingBillsError, "Could not check existing bills. Please try again.")
         )
     );
   }
@@ -1862,7 +1865,7 @@ export async function generateMonthlyBills() {
     if (insertError) {
       redirect(
         "/admin/billing?error=" +
-          encodeURIComponent("Could not create bills: " + insertError.message)
+          encodeURIComponent(friendlyError(insertError, "Could not create bills. Please try again."))
       );
     }
 
@@ -1971,7 +1974,7 @@ export async function createBill(formData: FormData) {
   if (error) {
     redirect(
       billingRedirect(formData, {
-        error: "Could not create bill: " + error.message,
+        error: friendlyError(error, "Could not create bill. Please try again."),
       })
     );
   }
@@ -2071,7 +2074,7 @@ export async function recordPayment(formData: FormData) {
   if (paymentError) {
     redirect(
       billingRedirect(formData, {
-        error: "Could not record payment: " + paymentError.message,
+        error: friendlyError(paymentError, "Could not record payment. Please try again."),
       })
     );
   }
@@ -2093,8 +2096,10 @@ export async function recordPayment(formData: FormData) {
     redirect(
       billingRedirect(formData, {
         error:
-          "Payment was recorded but bill could not be updated: " +
-          updateError.message,
+          friendlyError(
+            updateError,
+            "The payment was recorded, but the bill couldn't be updated. Refresh and check the bill before trying again."
+          ),
       })
     );
   }
@@ -2207,7 +2212,7 @@ export async function confirmPendingPayment(formData: FormData) {
   if (updateBillError) {
     redirect(
       "/admin/payments?error=" +
-        encodeURIComponent("Could not update bill: " + updateBillError.message)
+        encodeURIComponent(friendlyError(updateBillError, "Could not update bill. Please try again."))
     );
   }
 
@@ -2224,8 +2229,10 @@ export async function confirmPendingPayment(formData: FormData) {
     redirect(
       "/admin/payments?error=" +
         encodeURIComponent(
-          "Bill was updated but the report could not be marked confirmed: " +
-            updatePaymentError.message
+          friendlyError(
+            updatePaymentError,
+            "The bill was updated, but the report couldn't be marked as confirmed. Refresh and check before trying again."
+          )
         )
     );
   }
@@ -2308,7 +2315,7 @@ export async function rejectPendingPayment(formData: FormData) {
 
   if (updateError) {
     redirect(
-      "/admin/payments?error=" + encodeURIComponent(updateError.message)
+      "/admin/payments?error=" + encodeURIComponent(friendlyError(updateError))
     );
   }
 
@@ -2379,7 +2386,7 @@ export async function deleteBill(formData: FormData) {
   if (deleteError) {
     redirect(
       billingRedirect(formData, {
-        error: "Could not delete bill: " + deleteError.message,
+        error: friendlyError(deleteError, "Could not delete bill. Please try again."),
       })
     );
   }
@@ -2487,7 +2494,7 @@ export async function createUtilityBill(formData: FormData) {
   if (error) {
     redirect(
       billingRedirect(formData, {
-        error: "Could not create utility bill: " + error.message,
+        error: friendlyError(error, "Could not create utility bill. Please try again."),
       })
     );
   }
@@ -2576,7 +2583,7 @@ export async function recordUtilityPayment(formData: FormData) {
   if (transactionError) {
     redirect(
       billingRedirect(formData, {
-        error: "Could not record payment: " + transactionError.message,
+        error: friendlyError(transactionError, "Could not record payment. Please try again."),
       })
     );
   }
@@ -2594,8 +2601,10 @@ export async function recordUtilityPayment(formData: FormData) {
     redirect(
       billingRedirect(formData, {
         error:
-          "Payment was recorded but utility bill could not be updated: " +
-          updateError.message,
+          friendlyError(
+            updateError,
+            "The payment was recorded, but the utility bill couldn't be updated. Refresh and check the bill before trying again."
+          ),
       })
     );
   }
@@ -2650,7 +2659,7 @@ export async function deleteUtilityBill(formData: FormData) {
   if (deleteError) {
     redirect(
       billingRedirect(formData, {
-        error: "Could not delete utility bill: " + deleteError.message,
+        error: friendlyError(deleteError, "Could not delete utility bill. Please try again."),
       })
     );
   }
@@ -2738,7 +2747,7 @@ export async function createTransaction(formData: FormData) {
   if (error) {
     redirect(
       "/admin/expenses?error=" +
-        encodeURIComponent("Could not record transaction: " + error.message)
+        encodeURIComponent(friendlyError(error, "Could not record transaction. Please try again."))
     );
   }
 
@@ -2767,7 +2776,7 @@ export async function deleteTransaction(formData: FormData) {
   if (error) {
     redirect(
       "/admin/expenses?error=" +
-        encodeURIComponent("Could not delete transaction: " + error.message)
+        encodeURIComponent(friendlyError(error, "Could not delete transaction. Please try again."))
     );
   }
 
@@ -2846,7 +2855,7 @@ export async function updateTransaction(formData: FormData) {
   if (error) {
     redirect(
       "/admin/expenses?error=" +
-        encodeURIComponent("Could not update transaction: " + error.message)
+        encodeURIComponent(friendlyError(error, "Could not update transaction. Please try again."))
     );
   }
 
@@ -2919,7 +2928,7 @@ export async function submitMaintenanceRequest(formData: FormData) {
   });
 
   if (error) {
-    redirect("/tenant/maintenance?error=" + encodeURIComponent(error.message));
+    redirect("/tenant/maintenance?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   await queueEmail((origin) =>
@@ -2992,7 +3001,7 @@ export async function updateMaintenanceRequestStatus(formData: FormData) {
     .select("id");
 
   if (error) {
-    redirect("/admin/maintenance?error=" + encodeURIComponent(error.message));
+    redirect("/admin/maintenance?error=" + encodeURIComponent(friendlyError(error)));
   }
 
   if (!data || data.length === 0) {

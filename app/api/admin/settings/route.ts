@@ -134,7 +134,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         {
           error: "Failed to save dorm settings",
-          details: settingsError.message,
         },
         { status: 500 }
       );

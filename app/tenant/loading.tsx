@@ -9,7 +9,7 @@ function Block({ className = "" }: { className?: string }) {
 export default function TenantLoading() {
   return (
     <div
-      className="mx-auto max-w-2xl"
+      className="mx-auto max-w-4xl"
       role="status"
       aria-label="Loading your dashboard"
     >
