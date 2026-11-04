@@ -265,3 +265,111 @@ export function notifyTenantPaymentDecision(
     });
   });
 }
+
+// ------------------------------------------------------------
+// Platform-admin related
+// ------------------------------------------------------------
+
+async function adminEmails() {
+  const { data } = await createAdminClient()
+    .from("users")
+    .select("email")
+    .eq("role", "platform_admin")
+    .is("disabled_at", null);
+
+  return (data ?? []).map((u) => u.email).filter(Boolean) as string[];
+}
+
+// A new owner signed up while "require approval" is on.
+export function notifyAdminsNewDormPending(
+  origin: string,
+  dormName: string,
+  ownerName: string
+) {
+  return safely("new dorm pending", async () => {
+    const emails = await adminEmails();
+
+    await Promise.all(
+      emails.map((to) =>
+        sendNotificationEmail({
+          to,
+          subject: `Dormitory awaiting approval: ${dormName}`,
+          heading: "A new dormitory needs approval",
+          paragraphs: [
+            `${ownerName} signed up with the dormitory "${dormName}".`,
+            "They can't sign in until you approve it.",
+          ],
+          cta: { label: "Review it", url: `${origin}/platform/dorms?status=pending` },
+        })
+      )
+    );
+  });
+}
+
+// The platform admin acted on a dorm: tell its owner(s) what happened.
+export function notifyOwnersDormDecision(
+  origin: string,
+  dormId: string,
+  decision: "approved" | "rejected" | "suspended" | "reactivated",
+  reason?: string | null
+) {
+  return safely(`dorm ${decision}`, async () => {
+    const [emails, name] = await Promise.all([ownerEmails(dormId), dormName(dormId)]);
+
+    const copy = {
+      approved: {
+        subject: `${name} was approved`,
+        heading: "Your dormitory was approved",
+        lines: [`${name} is approved. You can sign in and start setting it up.`],
+        cta: "Sign in",
+      },
+      rejected: {
+        subject: `${name} wasn't approved`,
+        heading: "Your dormitory wasn't approved",
+        lines: [`We couldn't approve ${name}.`],
+        cta: null,
+      },
+      suspended: {
+        subject: `${name} was suspended`,
+        heading: "Your dormitory was suspended",
+        lines: [`${name} has been suspended. You and your tenants can't sign in for now.`],
+        cta: null,
+      },
+      reactivated: {
+        subject: `${name} is active again`,
+        heading: "Your dormitory is active again",
+        lines: [`The suspension on ${name} was lifted. You and your tenants can sign in again.`],
+        cta: "Sign in",
+      },
+    }[decision];
+
+    await Promise.all(
+      emails.map((to) =>
+        sendNotificationEmail({
+          to,
+          subject: copy.subject,
+          heading: copy.heading,
+          paragraphs: [...copy.lines, ...(reason ? [`Reason: ${reason}`] : [])],
+          ...(copy.cta ? { cta: { label: copy.cta, url: `${origin}/` } } : {}),
+        })
+      )
+    );
+  });
+}
+
+// Someone signed in as the platform admin. Sent to every admin, so an
+// unexpected one is noticed.
+export function notifyAdminSignIn(email: string, ip: string, whenIso: string) {
+  return safely("admin sign-in", async () => {
+    await sendNotificationEmail({
+      to: email,
+      subject: "Platform admin sign-in",
+      heading: "Your admin account was just used to sign in",
+      paragraphs: [
+        `Time: ${new Date(whenIso).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} (Manila)`,
+        `Network address: ${ip}`,
+        "If this wasn't you, reset the admin password right away.",
+      ],
+    });
+  });
+}

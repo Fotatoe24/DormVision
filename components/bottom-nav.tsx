@@ -6,7 +6,7 @@ import { MoreHorizontal } from "lucide-react";
 import type { NavItem } from "@/lib/navigation";
 
 function isItemActive(pathname: string, href: string) {
-  const isRootRoute = href === "/admin" || href === "/tenant";
+  const isRootRoute = href === "/admin" || href === "/tenant" || href === "/platform";
   return isRootRoute ? pathname === href : pathname.startsWith(href);
 }
 

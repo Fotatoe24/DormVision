@@ -5,10 +5,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createSessionRow, isSessionActive } from "@/lib/session-store";
 import {
   createSessionToken,
+  sessionLifetimeSeconds,
   verifySessionToken,
   AUTH_COOKIE_NAME,
   type SessionPayload,
 } from "@/lib/jwt";
+import {
+  accessBlockMessage,
+  findAccessBlock,
+  type AccessBlock,
+} from "@/lib/account-access";
 
 export { createSessionToken, AUTH_COOKIE_NAME, type SessionPayload };
 
@@ -23,8 +29,28 @@ export async function verifyPassword(password: string, hash: string) {
 // Signs someone in: records a server-side session and returns the signed
 // cookie value that carries its id. The session row is what lets logout and
 // password changes actually end a sign-in (see lib/session-store.ts).
+//
+// Also the last line of defence for disabled accounts and suspended or
+// unapproved dormitories: every way of signing in ends up here, so none of them
+// (login, password reset, sign-up) can hand out a session to someone who is
+// blocked, whatever the caller remembered to check first.
+export class AccessBlockedError extends Error {
+  constructor(public block: AccessBlock) {
+    super(accessBlockMessage(block));
+  }
+}
+
 export async function issueSession(payload: Omit<SessionPayload, "sid">) {
-  const sid = await createSessionRow(createAdminClient(), payload.id);
+  const admin = createAdminClient();
+
+  const block = await findAccessBlock(admin, payload.id, payload.dormId);
+  if (block) throw new AccessBlockedError(block);
+
+  const sid = await createSessionRow(
+    admin,
+    payload.id,
+    sessionLifetimeSeconds(payload.role) * 1000
+  );
   return createSessionToken(sid ? { ...payload, sid } : payload);
 }
 

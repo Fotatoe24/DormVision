@@ -19,6 +19,7 @@ export default async function TenantLayout({
 
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
+  if (session.profile?.role === "platform_admin") redirect("/platform");
 
   // The dorm shown in the shell is the one of their live tenancy; the
   // session's dorm is only the fallback for someone who isn't a tenant yet

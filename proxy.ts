@@ -6,7 +6,7 @@ import { verifySessionToken, AUTH_COOKIE_NAME } from "@/lib/jwt";
 // root. This is Next 16's `proxy` convention (formerly `middleware`),
 // which runs on the Node.js runtime; session verification goes through
 // the lightweight jose-only helpers in lib/jwt.ts.
-const protectedPrefixes = ["/admin", "/tenant", "/profile"];
+const protectedPrefixes = ["/admin", "/tenant", "/profile", "/platform"];
 
 export async function proxy(request: NextRequest) {
   const isProtected = protectedPrefixes.some((prefix) =>

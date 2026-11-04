@@ -7,7 +7,8 @@ export default async function Home() {
 
   // Already signed in — skip straight to the right dashboard.
   if (session) {
-    redirect(session.profile?.role === "owner" ? "/admin" : "/tenant");
+    const role = session.profile?.role;
+    redirect(role === "owner" ? "/admin" : role === "platform_admin" ? "/platform" : "/tenant");
   }
 
   return <LoginCard />;

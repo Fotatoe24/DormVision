@@ -9,7 +9,7 @@ const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-foreground";
 
 function isItemActive(pathname: string, href: string) {
-  const isRootRoute = href === "/admin" || href === "/tenant";
+  const isRootRoute = href === "/admin" || href === "/tenant" || href === "/platform";
   return isRootRoute ? pathname === href : pathname.startsWith(href);
 }
 

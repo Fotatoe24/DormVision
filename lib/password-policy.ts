@@ -25,13 +25,21 @@ const COMMON_PASSWORDS = new Set([
   "monkey123", "dragon123", "master123", "login123", "pass1234", "test1234",
 ]);
 
+// The platform admin can act on every dormitory, so their password has to be
+// harder to guess than anyone else's.
+export const MIN_ADMIN_PASSWORD_LENGTH = 12;
+
 // Returns the reason a password is not acceptable, or null if it is fine.
+// `role: "platform_admin"` applies the stricter admin length.
 export function validatePassword(
   password: string,
-  context: { email?: string | null } = {}
+  context: { email?: string | null; role?: string | null } = {}
 ): string | null {
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  const minLength =
+    context.role === "platform_admin" ? MIN_ADMIN_PASSWORD_LENGTH : MIN_PASSWORD_LENGTH;
+
+  if (password.length < minLength) {
+    return `Password must be at least ${minLength} characters.`;
   }
 
   if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {

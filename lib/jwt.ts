@@ -19,20 +19,29 @@ export interface SessionPayload {
   id: string;
   email: string;
   fullName: string;
-  role: "owner" | "tenant";
+  role: UserRole;
   dormId: string | null;
   // Id of the server-side session this cookie belongs to (user_sessions,
   // migration 0022). Absent on cookies from before that existed.
   sid?: string;
 }
 
+export type UserRole = "owner" | "tenant" | "platform_admin";
+
 export const AUTH_COOKIE_NAME = "dormvision-token";
+
+// How long a sign-in lasts. Everyone gets a week except the platform admin, who
+// can act on every dormitory and so gets a working day: a stolen or forgotten
+// admin session expires on its own.
+export function sessionLifetimeSeconds(role: UserRole) {
+  return role === "platform_admin" ? 8 * 60 * 60 : 7 * 24 * 60 * 60;
+}
 
 export async function createSessionToken(payload: SessionPayload) {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(`${sessionLifetimeSeconds(payload.role)}s`)
     .sign(JWT_SECRET);
 }
 

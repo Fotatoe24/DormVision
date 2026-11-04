@@ -236,6 +236,7 @@ export async function PATCH(request: Request) {
 
     const passwordProblem = validatePassword(newPassword, {
       email: session.user.email,
+      role: session.profile?.role,
     });
 
     if (passwordProblem) {

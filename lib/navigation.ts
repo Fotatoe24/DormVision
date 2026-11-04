@@ -10,6 +10,8 @@ import {
   Settings,
   Home,
   User,
+  Building2,
+  ScrollText,
   type LucideIcon,
   Wrench,
 } from "lucide-react";
@@ -178,6 +180,51 @@ export const tenantNavigation: NavConfig = {
   secondaryGroups: [],
   desktopGroups: [
     { items: [tenantHome, tenantBilling, tenantMaintenance, tenantProfile] },
+  ],
+};
+
+// The platform admin's area. Five entries fit the mobile bottom nav's four
+// slots plus "More", so Settings lives in the More sheet.
+const platformOverview: NavItem = {
+  key: "overview",
+  label: "Overview",
+  href: "/platform",
+  icon: LayoutDashboard,
+};
+const platformDorms: NavItem = {
+  key: "dorms",
+  label: "Dormitories",
+  href: "/platform/dorms",
+  icon: Building2,
+};
+const platformAccounts: NavItem = {
+  key: "accounts",
+  label: "Accounts",
+  href: "/platform/accounts",
+  icon: Users,
+};
+const platformAudit: NavItem = {
+  key: "audit",
+  label: "Audit log",
+  href: "/platform/audit",
+  icon: ScrollText,
+};
+const platformSettings: NavItem = {
+  key: "settings",
+  label: "Settings",
+  href: "/platform/settings",
+  icon: Settings,
+};
+
+export const platformNavigation: NavConfig = {
+  primary: [platformOverview, platformDorms, platformAccounts, platformAudit],
+  secondaryGroups: [{ label: "System", items: [platformSettings] }],
+  desktopGroups: [
+    {
+      label: "Platform",
+      items: [platformOverview, platformDorms, platformAccounts, platformAudit],
+    },
+    { label: "System", items: [platformSettings] },
   ],
 };
 

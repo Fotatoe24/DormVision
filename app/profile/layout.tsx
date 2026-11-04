@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { AdminShell } from "@/components/admin-shell";
 import { TenantShell } from "@/components/tenant-shell";
+import { PlatformShell } from "@/components/platform-shell";
 import { getCurrentTenancy } from "@/lib/tenant-status";
 import { AppearanceSync } from "@/components/appearance-sync";
 import { getSavedAppearance } from "@/lib/appearance";
@@ -31,6 +32,21 @@ export default async function ProfileLayout({
     getSavedAppearance(session.user.id),
     getUserAvatar(session.user.id),
   ]);
+
+  if (session.profile?.role === "platform_admin") {
+    return (
+      <>
+        <AppearanceSync userId={session.user.id} {...appearance} />
+        <PlatformShell
+          adminName={session.profile.full_name}
+          avatarUrl={avatar.avatarUrl}
+          avatarColor={avatar.avatarColor}
+        >
+          {children}
+        </PlatformShell>
+      </>
+    );
+  }
 
   if (isOwner) {
     const [dormName, pendingRequestsCount] = await Promise.all([

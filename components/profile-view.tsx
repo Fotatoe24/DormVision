@@ -321,7 +321,9 @@ export function ProfileView({ user }: { user: ProfileUser }) {
         <button
           type="button"
           onClick={() => {
-            router.push(user.role === "owner" ? "/admin" : "/tenant");
+            router.push(
+              user.role === "owner" ? "/admin" : user.role === "platform_admin" ? "/platform" : "/tenant"
+            );
           }}
           className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
           aria-label="Back to dashboard"
@@ -384,7 +386,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
 
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent">
-              {user.role === "owner" ? "Owner" : "Tenant"}
+              {user.role === "owner" ? "Owner" : user.role === "platform_admin" ? "Platform admin" : "Tenant"}
             </span>
 
             {user.dormName && (

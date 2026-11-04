@@ -11,9 +11,14 @@ import {
   verifyPassword,
   createSessionToken,
   issueSession,
+  AccessBlockedError,
   AUTH_COOKIE_NAME,
 } from "@/lib/auth";
-import { verifySessionToken } from "@/lib/jwt";
+import { verifySessionToken, sessionLifetimeSeconds, type UserRole } from "@/lib/jwt";
+import { getPlatformSettings } from "@/lib/platform-settings";
+import { findDormBlock } from "@/lib/account-access";
+import { recordAudit } from "@/lib/audit";
+import { getSiteOrigin } from "@/lib/site-origin";
 import { revokeSession, revokeUserSessions } from "@/lib/session-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/mailer";
@@ -33,6 +38,8 @@ import {
 } from "@/lib/login-lockout";
 import { getCurrentTenancy } from "@/lib/tenant-status";
 import {
+  notifyAdminSignIn,
+  notifyAdminsNewDormPending,
   notifyOwnerMaintenanceRequest,
   notifyOwnerNewRegistration,
   notifyTenantPaymentDecision,
@@ -50,7 +57,10 @@ import {
 // scoping now does it explicitly (.eq("dorm_id", dormId) etc.).
 // ============================================================
 
-const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days, matches the JWT's own expiry
+// Where each role lands after signing in.
+function homePathFor(role: UserRole) {
+  return role === "owner" ? "/admin" : role === "platform_admin" ? "/platform" : "/tenant";
+}
 
 // Starts a server-side session for someone who has just proven who they are.
 // If that can't be recorded, the account (or password) change that came
@@ -63,6 +73,9 @@ async function startSession(
   try {
     return await issueSession(payload);
   } catch (error) {
+    if (error instanceof AccessBlockedError) {
+      redirect("/?error=" + encodeURIComponent(error.message));
+    }
     console.error("Could not start a session:", error);
     redirect(
       fallbackPath +
@@ -72,31 +85,15 @@ async function startSession(
   }
 }
 
-async function setSessionCookie(token: string) {
+async function setSessionCookie(token: string, role: UserRole) {
   const cookieStore = await cookies();
   cookieStore.set(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: SESSION_COOKIE_MAX_AGE,
+    maxAge: sessionLifetimeSeconds(role),
     path: "/",
   });
-}
-
-// Base URL for the current request. Falls back to the request's own
-// host so this works in dev/preview/prod without extra env config, but
-// honors NEXT_PUBLIC_SITE_URL if set (useful when multiple hosts serve
-// the same deployment and links should always point at one).
-async function getSiteOrigin() {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL;
-  }
-
-  const headersList = await headers();
-  const host = headersList.get("host");
-  const protocol = host?.startsWith("localhost") ? "http" : "https";
-
-  return `${protocol}://${host}`;
 }
 
 // Email notifications go out AFTER the response is sent (Next's after()), so
@@ -173,9 +170,20 @@ export async function login(formData: FormData) {
     "/"
   );
 
-  await setSessionCookie(token);
+  await setSessionCookie(token, user.role);
 
-  redirect(user.role === "owner" ? "/admin" : "/tenant");
+  if (user.role === "platform_admin") {
+    // Every admin sign-in is recorded and emailed, so an unexpected one shows.
+    const ip = clientIpFrom(await headers());
+    await recordAudit(admin, {
+      actor: { id: user.id, email: user.email },
+      action: "admin.sign_in",
+      ip,
+    });
+    await queueEmail(async () => notifyAdminSignIn(user.email, ip, new Date().toISOString()));
+  }
+
+  redirect(homePathFor(user.role));
 }
 
 export async function logout() {
@@ -316,7 +324,10 @@ export async function resetPassword(formData: FormData) {
     );
   }
 
-  const emailProblem = validatePassword(password, { email: user.email });
+  const emailProblem = validatePassword(password, {
+    email: user.email,
+    role: user.role,
+  });
 
   if (emailProblem) {
     redirect(
@@ -356,7 +367,7 @@ export async function resetPassword(formData: FormData) {
     "/"
   );
 
-  await setSessionCookie(sessionToken);
+  await setSessionCookie(sessionToken, user.role);
 
   redirect(
     "/?success=" + encodeURIComponent("Password updated. You're signed in.")
@@ -451,6 +462,37 @@ export async function signUpOwner(formData: FormData) {
 
   const dormId = rpcResult[0].out_dorm_id as string;
 
+  // When the platform admin has switched approval on, the new dorm waits (no
+  // sign-in, not findable by tenants) until they approve it.
+  const { requireOwnerApproval } = await getPlatformSettings(admin);
+
+  if (requireOwnerApproval) {
+    const { error: pendingError } = await admin
+      .from("dormitories")
+      .update({ approved_at: null })
+      .eq("id", dormId);
+
+    if (pendingError) {
+      // Never leave an account that was meant to wait approved by accident.
+      console.error("Could not hold the new dorm for approval:", pendingError);
+      await admin.from("users").delete().eq("id", userId);
+      await admin.from("dormitories").delete().eq("id", dormId);
+      redirect(
+        "/signup?error=" +
+          encodeURIComponent("Could not create your owner account. Please try again.")
+      );
+    }
+
+    await queueEmail((origin) => notifyAdminsNewDormPending(origin, dormName, fullName));
+
+    redirect(
+      "/?success=" +
+        encodeURIComponent(
+          "Account created. Your dormitory is awaiting approval -- we'll email you as soon as it's reviewed."
+        )
+    );
+  }
+
   const token = await startSession(
     {
       id: userId,
@@ -462,7 +504,7 @@ export async function signUpOwner(formData: FormData) {
     "/"
   );
 
-  await setSessionCookie(token);
+  await setSessionCookie(token, "owner");
 
   redirect("/admin");
 }
@@ -547,7 +589,10 @@ export async function signUpTenant(formData: FormData) {
     .eq("dorm_id", dormId)
     .maybeSingle();
 
-  if (dormSettings && dormSettings.allow_tenant_registration === false) {
+  if (
+    (dormSettings && dormSettings.allow_tenant_registration === false) ||
+    (await findDormBlock(admin, dormId))
+  ) {
     redirect(
       "/signup/tenant?error=" +
         encodeURIComponent(
@@ -630,7 +675,7 @@ export async function signUpTenant(formData: FormData) {
     "/"
   );
 
-  await setSessionCookie(token);
+  await setSessionCookie(token, "tenant");
 
   redirect(
     "/tenant?saved=" +
@@ -977,6 +1022,15 @@ export async function submitRegistrationRequest(formData: FormData) {
     );
   }
 
+  if (await findDormBlock(admin, dormId)) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent(
+          "This dormitory isn't accepting new registrations right now."
+        )
+    );
+  }
+
   const { error: insertError } = await admin
     .from("tenant_registration_requests")
     .insert({
@@ -1018,7 +1072,8 @@ export async function submitRegistrationRequest(formData: FormData) {
       dormId,
       // Same session, new dorm: keep the id so it isn't treated as a new login.
       ...(session.sid ? { sid: session.sid } : {}),
-    })
+    }),
+    session.profile.role
   );
 
   await queueEmail((origin) =>

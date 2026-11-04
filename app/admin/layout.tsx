@@ -20,6 +20,7 @@ export default async function AdminLayout({
   const session = await getSessionUser();
 
   if (!session) redirect("/");
+  if (session.profile?.role === "platform_admin") redirect("/platform");
   if (session.profile?.role !== "owner") redirect("/tenant");
 
   const [

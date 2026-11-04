@@ -11,7 +11,7 @@ type DbError = { code?: string } | null;
 
 const TABLE = "user_sessions";
 
-// Must match the JWT's own expiry (lib/jwt.ts: "7d").
+// The default; must match the JWT's own expiry (lib/jwt.ts sessionLifetimeSeconds).
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 
 // "The table isn't there yet" -- migration 0022 hasn't been run. PostgREST
@@ -25,7 +25,8 @@ function isMissingTable(error: DbError | undefined) {
 // to the old cookie-only behavior instead of locking everyone out).
 export async function createSessionRow(
   admin: Admin,
-  userId: string
+  userId: string,
+  lifetimeMs: number = SESSION_LIFETIME_MS
 ): Promise<string | null> {
   // Housekeeping so expired rows don't pile up (best effort).
   if (Math.random() < 0.02) {
@@ -36,7 +37,7 @@ export async function createSessionRow(
     .from(TABLE)
     .insert({
       user_id: userId,
-      expires_at: new Date(Date.now() + SESSION_LIFETIME_MS).toISOString(),
+      expires_at: new Date(Date.now() + lifetimeMs).toISOString(),
     })
     .select("id")
     .single();

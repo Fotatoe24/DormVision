@@ -61,6 +61,7 @@ export default async function TenantPage({
 
   if (!session) redirect("/");
   if (session.profile?.role === "owner") redirect("/admin");
+  if (session.profile?.role === "platform_admin") redirect("/platform");
 
   // Anything short of an approved tenant record gets the
   // pending/rejected/apply screen instead of the real tenant
