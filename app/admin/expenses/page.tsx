@@ -8,7 +8,8 @@ import {
   deleteTransaction,
   updateTransaction,
 } from "@/lib/actions";
-import { formatMoney } from "@/lib/billing";
+import { formatMoney, toDateString } from "@/lib/billing";
+import { periodDataStart } from "@/lib/dashboard-stats";
 import { TransactionModal } from "@/components/transaction-modal";
 import { TransactionRowMenu } from "@/components/transaction-row-menu";
 import { IncomeExpenseChart } from "@/components/income-expense-chart";
@@ -179,18 +180,23 @@ export default async function ExpensesPage({
   );
 
   // ------------------------------------------------------------
-  // All-time transactions + confirmed payments -- fetched once,
-  // sliced in memory for the 6-month trend chart, the selected
-  // period's summary/donut/list, and the category/search filters.
-  // Small-dorm scale (same assumption app/admin/payments already
-  // makes by fetching its full history unpaginated).
+  // Transactions + confirmed payments from the window this page can show --
+  // fetched once, sliced in memory for the 6-month trend chart, the selected
+  // period's summary/donut/list, and the category/search filters. Nothing
+  // older than periodDataStart() is ever displayed (the views are this month,
+  // last month and year to date), so nothing older is fetched: this page used
+  // to download the dorm's entire history on every visit. The search matches
+  // formatted text (names, dates), which can't be pushed into the database,
+  // so the list is still paged in memory -- over a bounded set.
   // ------------------------------------------------------------
+  const windowStart = periodDataStart(new Date());
   const [{ data: transactions, error: transactionsError }, { data: payments, error: paymentsError }] =
     await Promise.all([
       supabase
         .from("transactions")
         .select("id, type, category, amount, description, occurred_at")
         .eq("dorm_id", dormId)
+        .gte("occurred_at", toDateString(windowStart))
         .order("occurred_at", { ascending: false }),
       tenantIds.length
         ? supabase
@@ -198,6 +204,7 @@ export default async function ExpensesPage({
             .select("id, amount, paid_at, tenant_id")
             .eq("status", "confirmed")
             .in("tenant_id", tenantIds)
+            .gte("paid_at", windowStart.toISOString())
             .order("paid_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
     ]);

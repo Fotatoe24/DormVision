@@ -13,7 +13,13 @@ import {
   paymentMethodLabels,
 } from "@/lib/billing";
 import { PaginationControls } from "@/components/pagination-controls";
-import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
+import {
+  parsePage,
+  getRange,
+  getTotalPages,
+  isPageOutOfRange,
+  pageHref,
+} from "@/lib/pagination";
 import { BillPaymentBreakdown } from "@/components/bill-payment-breakdown";
 import { PaymentReportForm } from "@/components/payment-report-form";
 import { ProofViewer } from "@/components/proof-viewer";
@@ -28,10 +34,21 @@ import { Receipt, FileText } from "lucide-react";
 export default async function TenantBillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string; page?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    saved?: string;
+    page?: string;
+    paymentsPage?: string;
+  }>;
 }) {
-  const { error, saved, page: pageParam } = await searchParams;
+  const {
+    error,
+    saved,
+    page: pageParam,
+    paymentsPage: paymentsPageParam,
+  } = await searchParams;
   const page = parsePage(pageParam);
+  const paymentsPage = parsePage(paymentsPageParam);
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -109,10 +126,18 @@ export default async function TenantBillingPage({
         )
         .eq("tenant_id", me.id)
         .order("due_date", { ascending: false })
+        // unique tiebreaker: keeps page boundaries stable
+        .order("id")
         .range(billsFrom, billsTo)
     : { data: [], count: 0, error: null };
 
   const billsTotalPages = getTotalPages(billsCount ?? 0);
+
+  if (isPageOutOfRange(billsError)) {
+    redirect(
+      pageHref("/tenant/billing", { paymentsPage: paymentsPageParam }, "page", 1)
+    );
+  }
 
   if (billsError) {
     console.error("Bills lookup error:", billsError);
@@ -200,19 +225,30 @@ export default async function TenantBillingPage({
 
   // ---------------------------------------------------------
   // Payment history -- confirmed payments only, each with a receipt
-  // (see lib/receipts.ts / app/receipts/[id]). Capped rather than
-  // paginated: see the same reasoning as the utility bills list on
-  // the Home tab.
+  // (see lib/receipts.ts / app/receipts/[id]). Paged, not capped: it used to
+  // stop at the latest 10, which left older receipts unreachable from here.
   // ---------------------------------------------------------
-  const { data: confirmedPayments } = me?.id
+  const PAYMENTS_PAGE_SIZE = 10;
+  const paymentsRange = getRange(paymentsPage, PAYMENTS_PAGE_SIZE);
+
+  const {
+    data: confirmedPayments,
+    count: paymentsCount,
+    error: paymentsError,
+  } = me?.id
     ? await supabase
         .from("payments")
-        .select("id, amount, method, paid_at")
+        .select("id, amount, method, paid_at", { count: "exact" })
         .eq("tenant_id", me.id)
         .eq("status", "confirmed")
         .order("paid_at", { ascending: false })
-        .limit(10)
-    : { data: [] };
+        .order("id")
+        .range(paymentsRange.from, paymentsRange.to)
+    : { data: [], count: 0, error: null };
+
+  if (isPageOutOfRange(paymentsError)) {
+    redirect(pageHref("/tenant/billing", { page: pageParam }, "paymentsPage", 1));
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -367,7 +403,12 @@ export default async function TenantBillingPage({
             page={page}
             totalPages={billsTotalPages}
             hrefForPage={(p) =>
-              p > 1 ? `/tenant/billing?page=${p}` : "/tenant/billing"
+              pageHref(
+                "/tenant/billing",
+                { page: pageParam, paymentsPage: paymentsPageParam },
+                "page",
+                p
+              )
             }
           />
         </div>
@@ -405,6 +446,19 @@ export default async function TenantBillingPage({
                 </div>
               ))}
             </div>
+
+            <PaginationControls
+              page={paymentsPage}
+              totalPages={getTotalPages(paymentsCount ?? 0, PAYMENTS_PAGE_SIZE)}
+              hrefForPage={(p) =>
+                pageHref(
+                  "/tenant/billing",
+                  { page: pageParam, paymentsPage: paymentsPageParam },
+                  "paymentsPage",
+                  p
+                )
+              }
+            />
           </div>
         )}
       </div>

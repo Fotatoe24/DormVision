@@ -11,6 +11,19 @@ import {
   formatPaymentDate,
 } from "@/lib/billing";
 import { EmptyState } from "@/components/empty-state";
+import { PaginationControls } from "@/components/pagination-controls";
+import {
+  getRange,
+  getTotalPages,
+  isPageOutOfRange,
+  pageHref,
+  parsePage,
+} from "@/lib/pagination";
+
+// Bills per page, counted across ALL past stays. A person who has lived in
+// several dorms for years has a long history; this page used to silently stop
+// at the newest 150 bills.
+const BILLS_PAGE_SIZE = 8;
 
 // Billing from dorms the tenant has already moved out of. A moved-out
 // tenancy is closed for the dashboard, billing and maintenance pages, but
@@ -20,7 +33,13 @@ import { EmptyState } from "@/components/empty-state";
 //
 // Not gated on being an approved tenant: this is exactly the page a
 // moved-out tenant, or one waiting on a new dorm's approval, needs.
-export default async function TenantHistoryPage() {
+export default async function TenantHistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -41,25 +60,58 @@ export default async function TenantHistoryPage() {
     ...new Set(stayRows.map((s) => s.dorm_id).filter(Boolean)),
   ] as string[];
 
-  const [{ data: dorms }, { data: bills }, { data: payments }] = tenantIds.length
+  const { from, to } = getRange(page, BILLS_PAGE_SIZE);
+
+  const [dormsResult, billsResult, stayTotalEntries] = tenantIds.length
     ? await Promise.all([
         admin.from("dormitories").select("id, name").in("id", dormIds),
         admin
           .from("bills")
           .select(
-            "id, tenant_id, room_id, due_date, total_amount, amount_paid, status"
+            "id, tenant_id, room_id, due_date, total_amount, amount_paid, status",
+            { count: "exact" }
           )
           .in("tenant_id", tenantIds)
           .order("due_date", { ascending: false })
-          .limit(150),
-        admin
-          .from("payments")
-          .select("id, bill_id, tenant_id, amount, paid_at")
-          .in("tenant_id", tenantIds)
-          .eq("status", "confirmed")
-          .order("paid_at", { ascending: true }),
+          .order("id")
+          .range(from, to),
+        // How many bills each stay had (a handful of cheap counts: stays are few).
+        Promise.all(
+          stayRows.map(async (stay) => {
+            const { count } = await admin
+              .from("bills")
+              .select("id", { count: "exact", head: true })
+              .eq("tenant_id", stay.id);
+            return [stay.id, count ?? 0] as const;
+          })
+        ),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+    : [
+        { data: [] as { id: string; name: string }[] },
+        { data: [], count: 0, error: null },
+        [] as (readonly [string, number])[],
+      ];
+
+  const dorms = dormsResult.data;
+  const bills = billsResult.data;
+  const billsCount = billsResult.count ?? 0;
+  const stayTotals = new Map(stayTotalEntries);
+
+  // A stale bookmark or a hand-typed ?page=99: back to the first page.
+  if (isPageOutOfRange(billsResult.error)) {
+    redirect("/tenant/history");
+  }
+
+  // Confirmed payments for just the bills on screen.
+  const billIds = (bills ?? []).map((b) => b.id);
+  const { data: payments } = billIds.length
+    ? await admin
+        .from("payments")
+        .select("id, bill_id, tenant_id, amount, paid_at")
+        .in("bill_id", billIds)
+        .eq("status", "confirmed")
+        .order("paid_at", { ascending: true })
+    : { data: [] };
 
   // room_id is cleared on move-out, so the room a bill was for comes from
   // the bill itself.
@@ -122,6 +174,13 @@ export default async function TenantHistoryPage() {
             const stayBills = (bills ?? []).filter(
               (b) => b.tenant_id === stay.id
             );
+            const stayTotal = stayTotals.get(stay.id) ?? 0;
+
+            // Later pages show only the stays that have bills on them; a stay
+            // that never had a bill is mentioned once, on the first page.
+            if (stayBills.length === 0 && !(page === 1 && stayTotal === 0)) {
+              return null;
+            }
 
             return (
               <section
@@ -138,6 +197,7 @@ export default async function TenantHistoryPage() {
                     {stay.move_out_date
                       ? ` – ${formatBillDate(stay.move_out_date)}`
                       : ""}
+                    {` · ${stayTotal} bill${stayTotal === 1 ? "" : "s"}`}
                   </p>
                 </div>
 
@@ -237,6 +297,12 @@ export default async function TenantHistoryPage() {
               </section>
             );
           })}
+
+          <PaginationControls
+            page={page}
+            totalPages={getTotalPages(billsCount, BILLS_PAGE_SIZE)}
+            hrefForPage={(p) => pageHref("/tenant/history", {}, "page", p)}
+          />
         </div>
       )}
     </div>

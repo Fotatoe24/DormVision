@@ -73,3 +73,22 @@ export function buildMonthlyTrend(
     return { label, income, expenses };
   });
 }
+
+// The earliest date the Income & Expenses page can ever display anything from:
+// its views are "This Month", "Last Month" and "Year to Date", plus the same
+// 6-month trend chart as the dashboard. The page used to fetch the dorm's
+// all-time payments and transactions and then ignore everything older than this.
+// (In January "last month" is December of the previous year, and the 6-month
+// trend reaches back to August -- hence the min, not simply January 1st.)
+export function periodDataStart(now: Date) {
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  return new Date(
+    Math.min(
+      startOfYear.getTime(),
+      startOfLastMonth.getTime(),
+      trendWindowStart(now).getTime()
+    )
+  );
+}

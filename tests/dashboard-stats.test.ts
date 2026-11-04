@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildMonthlyTrend, trendWindowStart } from "@/lib/dashboard-stats";
+import { buildMonthlyTrend, periodDataStart, trendWindowStart } from "@/lib/dashboard-stats";
 import { toDateString } from "@/lib/billing";
 
 // Production runs in Manila time (instrumentation.ts); do the same here so the
@@ -131,4 +131,42 @@ test("fetching only the 6-month window gives exactly the same dashboard as fetch
       );
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// Income & Expenses page: it may only fetch from periodDataStart(), so that
+// date must be at or before the start of EVERY view the page offers.
+
+test("the Income & Expenses window covers every view, in every month of several years", () => {
+  for (let year = 2024; year <= 2027; year++) {
+    for (let month = 0; month < 12; month++) {
+      for (const day of [1, 15, 28]) {
+        const now = new Date(year, month, day, 12);
+        const start = periodDataStart(now).getTime();
+
+        const viewStarts = {
+          "this month": new Date(year, month, 1),
+          "last month": new Date(year, month - 1, 1),
+          "year to date": new Date(year, 0, 1),
+          "trend (oldest of 6 months)": trendWindowStart(now),
+        };
+
+        for (const [name, viewStart] of Object.entries(viewStarts)) {
+          assert.ok(start <= viewStart.getTime(), `${year}-${month + 1}-${day}: window starts after the ${name} view`);
+        }
+      }
+    }
+  }
+});
+
+test("in January the window reaches into the previous year; later in the year it is the trend's start", () => {
+  assert.equal(toDateString(periodDataStart(new Date("2026-01-20T04:00:00Z"))), "2025-08-01"); // 6-month trend
+  assert.equal(toDateString(periodDataStart(new Date("2026-07-10T04:00:00Z"))), "2026-01-01"); // year to date
+  assert.equal(toDateString(periodDataStart(new Date("2026-03-10T04:00:00Z"))), "2025-10-01"); // trend still reaches back past Jan 1
+});
+
+test("the window is not wastefully wide: it starts exactly at the earliest view", () => {
+  const now = new Date("2026-11-03T04:00:00Z");
+
+  assert.equal(toDateString(periodDataStart(now)), "2026-01-01"); // YTD is the earliest in November
 });

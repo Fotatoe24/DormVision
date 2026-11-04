@@ -14,10 +14,15 @@ export default async function TenantDetailModal({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    saved?: string;
+    billsPage?: string;
+    paymentsPage?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { error, saved } = await searchParams;
+  const { error, saved, billsPage, paymentsPage } = await searchParams;
   const session = await getSessionUser();
 
   if (!session) redirect("/");
@@ -28,7 +33,14 @@ export default async function TenantDetailModal({
 
   return (
     <Dialog ariaLabel="Tenant details">
-      <TenantDetailContent id={id} dormId={dormId} error={error} saved={saved} />
+      <TenantDetailContent
+        id={id}
+        dormId={dormId}
+        error={error}
+        saved={saved}
+        billsPage={billsPage}
+        paymentsPage={paymentsPage}
+      />
     </Dialog>
   );
 }

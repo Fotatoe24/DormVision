@@ -319,6 +319,13 @@ export function RoomBillingModal({
                             })}
                           </div>
                         )}
+
+                        <Link
+                          href={`/admin/tenants/${tenant.id}`}
+                          className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+                        >
+                          Full billing history
+                        </Link>
                       </div>
                     ))}
                   </div>

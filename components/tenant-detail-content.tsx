@@ -1,7 +1,15 @@
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
+import { PaginationControls } from "@/components/pagination-controls";
+import {
+  getRange,
+  getTotalPages,
+  isPageOutOfRange,
+  pageHref,
+  parsePage,
+} from "@/lib/pagination";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   removeTenantFromRoom,
@@ -33,16 +41,25 @@ export const tenantStatusLabels: Record<string, string> = {
 // and its intercepted-route modal (app/admin/@modal/(.)tenants/[id]) so
 // the query logic and markup only live in one place. The caller owns
 // the surrounding chrome (page layout vs. dialog shell).
+// A tenant's bills and payments accumulate for as long as they stay (a bill a
+// month, plus payments), so each list is paged on its own: ?billsPage= and
+// ?paymentsPage=.
+const HISTORY_PAGE_SIZE = 6;
+
 export async function TenantDetailContent({
   id,
   dormId,
   error,
   saved,
+  billsPage,
+  paymentsPage,
 }: {
   id: string;
   dormId: string;
   error?: string;
   saved?: string;
+  billsPage?: string;
+  paymentsPage?: string;
 }) {
   const supabase = createAdminClient();
 
@@ -59,14 +76,20 @@ export async function TenantDetailContent({
     notFound();
   }
 
+  const billsPageNo = parsePage(billsPage);
+  const paymentsPageNo = parsePage(paymentsPage);
+  const billsRange = getRange(billsPageNo, HISTORY_PAGE_SIZE);
+  const paymentsRange = getRange(paymentsPageNo, HISTORY_PAGE_SIZE);
+
   const [
     { data: profile },
     { data: room },
-    { data: bills },
-    { data: payments },
+    { data: bills, count: billsCount, error: billsError },
+    { data: payments, count: paymentsCount, error: paymentsError },
     { data: assignmentHistory },
     { data: dormRooms },
     { data: dormTenants },
+    { data: unpaidBills },
   ] = await Promise.all([
     tenant.profile_id
       ? supabase
@@ -84,14 +107,23 @@ export async function TenantDetailContent({
       : Promise.resolve({ data: null }),
     supabase
       .from("bills")
-      .select("id, status, due_date, total_amount, amount_paid")
+      .select("id, status, due_date, total_amount, amount_paid", {
+        count: "exact",
+      })
       .eq("tenant_id", tenant.id)
-      .order("due_date", { ascending: false }),
+      .order("due_date", { ascending: false })
+      .order("id")
+      .range(billsRange.from, billsRange.to),
     supabase
       .from("payments")
-      .select("id, amount, paid_at, method")
+      .select("id, amount, paid_at, method", { count: "exact" })
       .eq("tenant_id", tenant.id)
-      .order("paid_at", { ascending: false }),
+      // Confirmed payments only. Pending and rejected reports used to be listed
+      // here too, in the same green as money received.
+      .eq("status", "confirmed")
+      .order("paid_at", { ascending: false })
+      .order("id")
+      .range(paymentsRange.from, paymentsRange.to),
     supabase
       .from("room_assignments")
       .select("id, started_at, ended_at, rooms(room_number)")
@@ -108,9 +140,24 @@ export async function TenantDetailContent({
       .select("room_id")
       .eq("dorm_id", dormId)
       .eq("status", "active"),
+    // The balance needs only what is still owed, not the whole history.
+    supabase
+      .from("bills")
+      .select("status, due_date, total_amount, amount_paid")
+      .eq("tenant_id", tenant.id)
+      .neq("status", "paid"),
   ]);
 
-  const balance = (bills ?? []).reduce((sum, bill) => {
+  // A stale bookmark or a hand-typed ?billsPage=99: back to that list's page 1.
+  const detailPath = `/admin/tenants/${tenant.id}`;
+  if (isPageOutOfRange(billsError)) {
+    redirect(pageHref(detailPath, { paymentsPage }, "billsPage", 1));
+  }
+  if (isPageOutOfRange(paymentsError)) {
+    redirect(pageHref(detailPath, { billsPage }, "paymentsPage", 1));
+  }
+
+  const balance = (unpaidBills ?? []).reduce((sum, bill) => {
     const displayStatus = displayBillStatus(bill);
     if (displayStatus === "paid") return sum;
     return sum + (Number(bill.total_amount) - Number(bill.amount_paid));
@@ -391,6 +438,15 @@ export async function TenantDetailContent({
                 </div>
               );
             })}
+            <div className="px-4 pb-4">
+              <PaginationControls
+                page={billsPageNo}
+                totalPages={getTotalPages(billsCount ?? 0, HISTORY_PAGE_SIZE)}
+                hrefForPage={(p) =>
+                  pageHref(detailPath, { billsPage, paymentsPage }, "billsPage", p)
+                }
+              />
+            </div>
           </div>
         ) : (
           <p className="px-4 py-6 text-center text-sm text-foreground-muted">
@@ -426,6 +482,15 @@ export async function TenantDetailContent({
                 </span>
               </div>
             ))}
+            <div className="px-4 pb-4">
+              <PaginationControls
+                page={paymentsPageNo}
+                totalPages={getTotalPages(paymentsCount ?? 0, HISTORY_PAGE_SIZE)}
+                hrefForPage={(p) =>
+                  pageHref(detailPath, { billsPage, paymentsPage }, "paymentsPage", p)
+                }
+              />
+            </div>
           </div>
         ) : (
           <p className="px-4 py-6 text-center text-sm text-foreground-muted">

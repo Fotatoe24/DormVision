@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateMonthlyBills } from "@/lib/actions";
-import { displayBillStatus as displayStatus } from "@/lib/billing";
+import {
+  displayBillStatus as displayStatus,
+  toDateString,
+} from "@/lib/billing";
+import { pickVisibleBills } from "@/lib/bill-history";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { PaginationControls } from "@/components/pagination-controls";
 import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
@@ -19,11 +23,9 @@ import { EmptyState } from "@/components/empty-state";
 const inputClass =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
 
-// How many of a room's most recent bills (rent) / utility bills to
-// load into its modal -- capped rather than unbounded so opening a
-// room with a long tenancy history doesn't pull its entire billing
-// history into one query. Comfortably covers a year of monthly
-// billing without paginating inside the modal itself.
+// How many bills per tenant (rent) / per room (utility) a room's pop-up shows.
+// Every UNPAID bill is always shown on top of this (see lib/bill-history.ts),
+// and a tenant's full history is one click away on their own, paginated, page.
 const HISTORY_CAP = 8;
 
 type StatusFilter = "all" | "outstanding" | "paid";
@@ -72,14 +74,13 @@ export default async function BillingPage({
   const supabase = createAdminClient();
 
   // ============================================================
-  // LOAD ROOMS, TENANTS, BILLS, UTILITY BILLS
+  // LOAD ROOMS, TENANTS, AND THE UNPAID BILLS
   //
-  // Billing groups everything by room, so unlike the old flat list
-  // this fetches full dorm-scoped tables (small-dorm scale, same
-  // assumption app/admin/expenses already makes) and groups/filters/
-  // paginates in memory -- grouping by room isn't expressible as a
-  // single paginated query without a lot of extra SQL for what's
-  // still a small dataset.
+  // The list of rooms is grouped, filtered and paged in memory -- rooms are
+  // bounded by the size of the building. What is NOT bounded is billing
+  // history, which grows every month, so this loads only the UNPAID bills
+  // (all a room's "₱X due" needs). The pop-up history for the rooms actually
+  // on screen is loaded separately below.
   // ============================================================
 
   const [
@@ -105,6 +106,7 @@ export default async function BillingPage({
         "id, tenant_id, room_id, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status"
       )
       .eq("dorm_id", dormId)
+      .neq("status", "paid")
       .order("due_date", { ascending: false }),
     supabase
       .from("utility_bills")
@@ -112,6 +114,7 @@ export default async function BillingPage({
         "id, room_id, due_date, water_amount, electricity_amount, total_amount, amount_paid, status, notes"
       )
       .eq("dorm_id", dormId)
+      .neq("status", "paid")
       .order("due_date", { ascending: false }),
   ]);
 
@@ -223,6 +226,79 @@ export default async function BillingPage({
   const totalPages = getTotalPages(filteredRooms.length);
   const { from: pageFrom, to: pageTo } = getRange(page);
   const pageRooms = filteredRooms.slice(pageFrom, pageTo + 1);
+
+  // ============================================================
+  // HISTORY FOR THE ROOMS ON SCREEN ONLY
+  //
+  // The pop-ups need some paid history to sit under the unpaid bills. Fetch
+  // just the last 12 months of paid bills, and only for the tenants/rooms on
+  // this page (at most 10 rooms), then let pickVisibleBills decide what shows.
+  // ============================================================
+  const now = new Date();
+  const historyCutoff = toDateString(
+    new Date(now.getFullYear(), now.getMonth() - 11, 1)
+  );
+  const pageTenantIds = pageRooms.flatMap((r) => r.tenants.map((t) => t.id));
+  const pageRoomIds = pageRooms.map((r) => r.room.id);
+
+  const [
+    { data: paidBills, error: paidBillsError },
+    { data: paidUtilityBills, error: paidUtilityError },
+  ] = await Promise.all([
+    pageTenantIds.length
+      ? supabase
+          .from("bills")
+          .select(
+            "id, tenant_id, room_id, due_date, rent_amount, other_charges, charges_note, total_amount, amount_paid, status"
+          )
+          .in("tenant_id", pageTenantIds)
+          .eq("status", "paid")
+          .gte("due_date", historyCutoff)
+          .order("due_date", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    pageRoomIds.length
+      ? supabase
+          .from("utility_bills")
+          .select(
+            "id, room_id, due_date, water_amount, electricity_amount, total_amount, amount_paid, status, notes"
+          )
+          .in("room_id", pageRoomIds)
+          .eq("status", "paid")
+          .gte("due_date", historyCutoff)
+          .order("due_date", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (paidBillsError || paidUtilityError) {
+    console.error("Could not load billing history:", paidBillsError ?? paidUtilityError);
+    return (
+      <main className="flex-1 bg-background px-6 py-10 text-foreground">
+        <div className="mx-auto max-w-3xl">
+          <LoadError what="billing history" />
+        </div>
+      </main>
+    );
+  }
+
+  const modalBillsByTenant = new Map<string, ModalBillRow[]>();
+  for (const room of pageRooms) {
+    for (const t of room.tenants) {
+      const paid = (paidBills ?? []).filter((b) => b.tenant_id === t.id);
+      modalBillsByTenant.set(
+        t.id,
+        pickVisibleBills([...(billsByTenant.get(t.id) ?? []), ...paid], HISTORY_CAP)
+      );
+    }
+  }
+
+  const modalUtilityByRoom = new Map<string, ModalUtilityBill[]>();
+  for (const room of pageRooms) {
+    const paid = (paidUtilityBills ?? []).filter((b) => b.room_id === room.room.id);
+    modalUtilityByRoom.set(
+      room.room.id,
+      pickVisibleBills([...room.utilityBills, ...paid], HISTORY_CAP)
+    );
+  }
 
   function pageHref(p: number) {
     const params = new URLSearchParams();
@@ -347,7 +423,7 @@ export default async function BillingPage({
             />
           )}
 
-          {pageRooms.map(({ room, tenants: roomTenants, utilityBills: roomUtilityBills, hasOutstanding, outstandingAmount }) => (
+          {pageRooms.map(({ room, tenants: roomTenants, hasOutstanding, outstandingAmount }) => (
             <RoomBillingModal
               key={room.id}
               roomId={room.id}
@@ -355,9 +431,9 @@ export default async function BillingPage({
               tenants={roomTenants.map((t) => ({
                 id: t.id,
                 full_name: t.full_name,
-                bills: (billsByTenant.get(t.id) ?? []).slice(0, HISTORY_CAP),
+                bills: modalBillsByTenant.get(t.id) ?? [],
               }))}
-              utilityBills={roomUtilityBills.slice(0, HISTORY_CAP)}
+              utilityBills={modalUtilityByRoom.get(room.id) ?? []}
               redirectState={redirectState}
               defaultOpen={openRoomId === room.id}
               trigger={

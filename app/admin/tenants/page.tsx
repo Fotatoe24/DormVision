@@ -9,7 +9,13 @@ import { CopyButton } from "@/components/copy-button";
 import { EmptyState } from "@/components/empty-state";
 import { Users } from "lucide-react";
 import { PaginationControls } from "@/components/pagination-controls";
-import { parsePage, getRange, getTotalPages } from "@/lib/pagination";
+import {
+  parsePage,
+  getRange,
+  getTotalPages,
+  isPageOutOfRange,
+  pageHref,
+} from "@/lib/pagination";
 
 const tenantStatusStyles: Record<string, string> = {
   active: "bg-status-paid/15 text-status-paid",
@@ -46,45 +52,14 @@ export default async function TenantsPage({
 
   const supabase = createAdminClient();
 
-  // Fetch tenants matching the search and tenant-status filters.
-  // Payment filtering happens after their balances are calculated.
-  let query = supabase
-    .from("tenants")
-    .select("id, profile_id, full_name, contact_number, status, room_id")
+  // Everyone's outstanding balance, from the dorm's UNPAID bills only: a paid
+  // bill owes nothing, and this keeps the page's cost independent of how many
+  // bills have ever been issued.
+  const { data: unpaidBills, error: billsError } = await supabase
+    .from("bills")
+    .select("tenant_id, status, due_date, total_amount, amount_paid")
     .eq("dorm_id", dormId)
-    .order("full_name");
-
-  if (q) {
-    query = query.ilike("full_name", `%${q}%`);
-  }
-
-  if (status && ["active", "inactive", "moved_out"].includes(status)) {
-    query = query.eq("status", status);
-  }
-
-  const { data: allTenants, error: tenantsError } = await query;
-
-  if (tenantsError) {
-    console.error("Could not load tenants:", tenantsError);
-    return (
-      <div className="mx-auto max-w-3xl">
-        <LoadError what="tenants" />
-      </div>
-    );
-  }
-
-  const tenantIds = (allTenants ?? []).map((t) => t.id);
-
-  const { data: bills, error: billsError } = tenantIds.length
-    ? await supabase
-        .from("bills")
-        .select("tenant_id, status, due_date, total_amount, amount_paid")
-        .in("tenant_id", tenantIds)
-        // A balance is the sum of what is still owed, and a paid bill owes
-        // nothing -- so don't download every paid bill ever issued just to skip
-        // it in the loop below.
-        .neq("status", "paid")
-    : { data: [], error: null };
+    .neq("status", "paid");
 
   if (billsError) {
     console.error("Could not load bills:", billsError);
@@ -95,14 +70,9 @@ export default async function TenantsPage({
     );
   }
 
-  // Calculate the outstanding balance for every tenant.
   const balanceByTenant = new Map<string, number>();
 
-  for (const tenantId of tenantIds) {
-    balanceByTenant.set(tenantId, 0);
-  }
-
-  for (const bill of bills ?? []) {
+  for (const bill of unpaidBills ?? []) {
     if (displayBillStatus(bill) === "paid") continue;
 
     const remaining = Math.max(
@@ -116,20 +86,63 @@ export default async function TenantsPage({
     );
   }
 
-  // Apply the payment-status filter using the calculated balance.
-  const filteredTenants = (allTenants ?? []).filter((tenant) => {
-    const balance = balanceByTenant.get(tenant.id) ?? 0;
+  const owingIds = [...balanceByTenant.entries()]
+    .filter(([, balance]) => balance > 0)
+    .map(([id]) => id);
 
-    if (payment === "paid") return balance === 0;
-    if (payment === "unpaid") return balance > 0;
+  // One PAGE of tenants, filtered and counted by the database. (Moved-out
+  // tenants are kept forever, so this list only ever grows; it used to load
+  // every tenant and slice the page out in memory.)
+  let query = supabase
+    .from("tenants")
+    .select("id, profile_id, full_name, contact_number, status, room_id", {
+      count: "exact",
+    })
+    .eq("dorm_id", dormId)
+    // The id breaks ties between people with the same name: without a unique
+    // sort key a row can repeat or vanish at a page boundary.
+    .order("full_name")
+    .order("id");
 
-    return true;
-  });
+  if (q) {
+    query = query.ilike("full_name", `%${q}%`);
+  }
 
-  // Paginate only after applying all filters.
-  const totalPages = getTotalPages(filteredTenants.length);
+  if (status && ["active", "inactive", "moved_out"].includes(status)) {
+    query = query.eq("status", status);
+  }
+
+  // "Unpaid" = has a balance; "Paid" = everyone else (including people who
+  // have never been billed), exactly as the old in-memory filter decided.
+  if (payment === "unpaid") {
+    query = query.in("id", owingIds);
+  } else if (payment === "paid" && owingIds.length > 0) {
+    query = query.not("id", "in", `(${owingIds.join(",")})`);
+  }
+
   const { from, to } = getRange(page);
-  const tenants = filteredTenants.slice(from, to + 1);
+  const {
+    data: pageTenants,
+    count: matchingCount,
+    error: tenantsError,
+  } = await query.range(from, to);
+
+  // A stale bookmark or a hand-typed ?page=99: back to the first page.
+  if (isPageOutOfRange(tenantsError)) {
+    redirect(pageHref("/admin/tenants", { q, status, payment }, "page", 1));
+  }
+
+  if (tenantsError) {
+    console.error("Could not load tenants:", tenantsError);
+    return (
+      <div className="mx-auto max-w-3xl">
+        <LoadError what="tenants" />
+      </div>
+    );
+  }
+
+  const tenants = pageTenants ?? [];
+  const totalPages = getTotalPages(matchingCount ?? 0);
 
   // Fetch room numbers only for the tenants on the current page.
   const roomIds = Array.from(
@@ -220,8 +233,8 @@ export default async function TenantsPage({
       </AutoSubmitForm>
 
       <div className="mb-3 text-xs text-foreground-muted">
-        Showing {filteredTenants.length} tenant
-        {filteredTenants.length !== 1 ? "s" : ""}
+        Showing {matchingCount ?? 0} tenant
+        {matchingCount !== 1 ? "s" : ""}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
