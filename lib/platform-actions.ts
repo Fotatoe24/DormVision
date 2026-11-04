@@ -32,7 +32,9 @@ function reasonFrom(formData: FormData, { required }: { required: boolean }) {
 }
 
 function back(path: string, kind: "saved" | "error", message: string): never {
-  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
+  // The accounts page passes a path that already carries its search (?q=...).
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}${kind}=${encodeURIComponent(message)}`);
 }
 
 async function audit(
