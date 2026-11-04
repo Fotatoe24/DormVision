@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { PasswordInput } from "@/components/password-input";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { readableTextOn } from "@/lib/avatar-color";
+import { MIN_PASSWORD_LENGTH, validatePassword } from "@/lib/password-policy";
 import { logout } from "@/lib/actions";
 import { ArrowLeft } from "lucide-react";
 
@@ -262,8 +263,10 @@ export function ProfileView({ user }: { user: ProfileUser }) {
       return;
     }
 
-    if (newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters.");
+    const passwordProblem = validatePassword(newPassword);
+
+    if (passwordProblem) {
+      toast.error(passwordProblem);
       return;
     }
 
@@ -577,7 +580,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
               value={newPassword}
               onChange={setNewPassword}
               className={inputClass}
-              placeholder="min. 6 characters"
+              placeholder={`min. ${MIN_PASSWORD_LENGTH} characters`}
             />
           </div>
 
@@ -592,7 +595,7 @@ export function ProfileView({ user }: { user: ProfileUser }) {
               value={confirmPassword}
               onChange={setConfirmPassword}
               className={inputClass}
-              placeholder="min. 6 characters"
+              placeholder={`min. ${MIN_PASSWORD_LENGTH} characters`}
             />
           </div>
         </div>

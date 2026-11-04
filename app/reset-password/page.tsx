@@ -1,3 +1,4 @@
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
 import Link from "next/link";
 import { resetPassword } from "@/lib/actions";
 import { ToastListener } from "@/components/toast-listener";
@@ -59,8 +60,8 @@ export default async function ResetPasswordPage({
                 name="password"
                 autoComplete="new-password"
                 required
-                minLength={6}
-                placeholder="min. 6 characters"
+                minLength={MIN_PASSWORD_LENGTH}
+                placeholder={`min. ${MIN_PASSWORD_LENGTH} characters`}
                 className={inputClass}
               />
             </div>
@@ -74,8 +75,8 @@ export default async function ResetPasswordPage({
                 name="confirmPassword"
                 autoComplete="new-password"
                 required
-                minLength={6}
-                placeholder="min. 6 characters"
+                minLength={MIN_PASSWORD_LENGTH}
+                placeholder={`min. ${MIN_PASSWORD_LENGTH} characters`}
                 className={inputClass}
               />
             </div>

@@ -195,6 +195,7 @@ export default async function TenantMaintenancePage({
                   </p>
                   <p className="text-xs text-foreground-muted">
                     {new Date(r.created_at).toLocaleDateString("en-PH", {
+                      timeZone: "Asia/Manila",
                       month: "short",
                       day: "numeric",
                       year: "numeric",

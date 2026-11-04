@@ -93,6 +93,7 @@ function formatDate(d: string) {
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
     month: "short",
     day: "numeric",
     year: "numeric",

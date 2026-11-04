@@ -3,6 +3,7 @@ import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentTenancy } from "@/lib/tenant-status";
 import { friendlyError } from "@/lib/errors";
+import { validatePassword } from "@/lib/password-policy";
 import { revokeUserSessions } from "@/lib/session-store";
 import { imageExtension, sniffImageType } from "@/lib/image-files";
 
@@ -233,13 +234,12 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (newPassword.length < 6) {
-      return NextResponse.json(
-        {
-          error: "New password must be at least 6 characters.",
-        },
-        { status: 400 }
-      );
+    const passwordProblem = validatePassword(newPassword, {
+      email: session.user.email,
+    });
+
+    if (passwordProblem) {
+      return NextResponse.json({ error: passwordProblem }, { status: 400 });
     }
 
     const admin = createAdminClient();

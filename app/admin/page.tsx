@@ -6,7 +6,9 @@ import {
   formatMoney,
   displayBillStatus,
   formatPaymentDate,
+  toDateString,
 } from "@/lib/billing";
+import { buildMonthlyTrend, trendWindowStart } from "@/lib/dashboard-stats";
 import { CopyButton } from "@/components/copy-button";
 import {
   getPendingMaintenanceRequestsCount,
@@ -71,6 +73,9 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient();
 
+  // The trend chart shows six months; fetch nothing older than that.
+  const trendStart = trendWindowStart(new Date());
+
   const [
     { data: dorm },
     { data: rooms },
@@ -81,6 +86,7 @@ export default async function AdminPage() {
     { data: pendingMaintenanceRequests },
     pendingRequestsCount,
     pendingMaintenanceCount,
+    { count: billCount },
   ] = await Promise.all([
     supabase
       .from("dormitories")
@@ -100,11 +106,15 @@ export default async function AdminPage() {
       .select(
         "id, status, due_date, total_amount, amount_paid, tenant_id, room_id"
       )
-      .eq("dorm_id", dormId),
+      .eq("dorm_id", dormId)
+      // Paid bills never reach the outstanding total or the overdue list, so
+      // they are not fetched (the dorm's whole billing history used to be).
+      .neq("status", "paid"),
     supabase
       .from("transactions")
       .select("type, category, amount, occurred_at")
-      .eq("dorm_id", dormId),
+      .eq("dorm_id", dormId)
+      .gte("occurred_at", toDateString(trendStart)),
     supabase
       .from("tenant_registration_requests")
       .select("id, full_name, requested_room_note, submitted_at")
@@ -121,6 +131,12 @@ export default async function AdminPage() {
       .limit(3),
     getPendingRequestsCount(dormId),
     getPendingMaintenanceRequestsCount(dormId),
+    // Only needed for the setup checklist ("generate your first bills"), so
+    // count them instead of downloading them all.
+    supabase
+      .from("bills")
+      .select("id", { count: "exact", head: true })
+      .eq("dorm_id", dormId),
   ]);
 
   const roomRows = (rooms as RoomRow[] | null) ?? [];
@@ -144,7 +160,8 @@ export default async function AdminPage() {
           .from("payments")
           .select("amount, paid_at")
           .eq("status", "confirmed")
-          .in("tenant_id", tenantIds),
+          .in("tenant_id", tenantIds)
+          .gte("paid_at", trendStart.toISOString()),
         // Tenant-reported payments waiting for the owner to confirm or
         // reject -- the most actionable thing on the dashboard.
         supabase
@@ -220,46 +237,7 @@ export default async function AdminPage() {
   const paymentRows = allPayments ?? [];
   const transactionRows = transactions ?? [];
 
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const offset = 5 - i;
-    const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
-    return {
-      start,
-      end,
-      label: start.toLocaleDateString("en-PH", {
-        month: "short",
-        year: "2-digit",
-      }),
-    };
-  });
-
-  const monthlyTrend = months.map(({ start, end, label }) => {
-    const income =
-      paymentRows
-        .filter((p) => {
-          const d = new Date(p.paid_at);
-          return d >= start && d < end;
-        })
-        .reduce((sum, p) => sum + Number(p.amount), 0) +
-      transactionRows
-        .filter((t) => {
-          if (t.type !== "income" || t.category === "rent") return false;
-          const d = new Date(t.occurred_at + "T00:00:00");
-          return d >= start && d < end;
-        })
-        .reduce((sum, t) => sum + Number(t.amount), 0);
-
-    const expenses = transactionRows
-      .filter((t) => {
-        if (t.type !== "expense") return false;
-        const d = new Date(t.occurred_at + "T00:00:00");
-        return d >= start && d < end;
-      })
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-
-    return { label, income, expenses };
-  });
+  const monthlyTrend = buildMonthlyTrend(paymentRows, transactionRows, now);
 
   const monthlyRevenue = monthlyTrend[monthlyTrend.length - 1]?.income ?? 0;
 
@@ -426,7 +404,7 @@ export default async function AdminPage() {
       key: "bills",
       label: "Generate your first bills",
       hint: "One click creates this month's rent bills.",
-      done: (bills ?? []).length > 0,
+      done: (billCount ?? 0) > 0,
       href: "/admin/billing",
     },
   ];

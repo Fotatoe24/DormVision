@@ -1,5 +1,6 @@
 "use client";
 
+import { toDateString } from "@/lib/billing";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useDismissableOverlay } from "@/components/use-dismissable-overlay";
@@ -33,13 +34,18 @@ export type TransactionFormValues = {
   occurredAt: string;
 };
 
-const emptyValues: TransactionFormValues = {
-  type: "expense",
-  category: "",
-  amount: "",
-  description: "",
-  occurredAt: new Date().toISOString().slice(0, 10),
-};
+// A function, not a constant: "today" has to be worked out when the form is
+// opened (a constant froze it at page load), and from the LOCAL date -- the UTC
+// string is yesterday's date for anyone adding an entry before 8 AM in Manila.
+function emptyValues(): TransactionFormValues {
+  return {
+    type: "expense",
+    category: "",
+    amount: "",
+    description: "",
+    occurredAt: toDateString(new Date()),
+  };
+}
 
 // Shared Add/Edit modal — createTransaction and updateTransaction take
 // identical fields (updateTransaction just adds a hidden transactionId),
@@ -74,7 +80,7 @@ export function TransactionModal({
   const open = isControlled ? openProp : internalOpen;
   const setOpen = isControlled ? onOpenChange! : setInternalOpen;
 
-  const values = initialValues ?? emptyValues;
+  const values = initialValues ?? emptyValues();
   const { overlayRef, closeButtonRef } = useDismissableOverlay({
     open,
     onClose: () => setOpen(false),

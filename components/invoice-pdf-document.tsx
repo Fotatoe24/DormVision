@@ -198,7 +198,7 @@ function formatMoneyPdf(n: number) {
 function formatDatePdf(iso: string) {
   return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString(
     "en-PH",
-    { month: "short", day: "numeric", year: "numeric" }
+    { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }
   );
 }
 

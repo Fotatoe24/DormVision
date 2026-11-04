@@ -148,7 +148,12 @@ export default async function MaintenancePage({
                   <p className="text-xs text-foreground-muted">
                     {tenantName ?? "Unknown tenant"}
                     {roomNumber ? ` · Room ${roomNumber}` : ""} ·{" "}
-                    {new Date(r.created_at).toLocaleDateString()}
+                    {new Date(r.created_at).toLocaleDateString("en-PH", {
+                      timeZone: "Asia/Manila",
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
                   </p>
                 </div>
                 <span

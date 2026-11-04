@@ -1,8 +1,11 @@
 // Initials sit on a color the USER picked (or the default), so no fixed text
 // color is safe: white on a pale amber is unreadable, dark on a deep blue
-// too. Pick whichever of near-black / white contrasts better; the better of
-// the two is always at least 4.58:1, i.e. WCAG AA for normal text.
-export function readableTextOn(background: string): "#ffffff" | "#0b1a24" {
+// too. Pick whichever of black / white contrasts better. With PURE black the
+// better of the two is always at least 4.58:1 (the worst case, a mid-tone
+// around #777), i.e. WCAG AA for normal text on any background. A softer
+// near-black would look nicer but dips to about 4.2:1 on some colors, so it is
+// deliberately plain black.
+export function readableTextOn(background: string): "#ffffff" | "#000000" {
   const hex = background.replace("#", "");
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
 
@@ -12,8 +15,8 @@ export function readableTextOn(background: string): "#ffffff" | "#0b1a24" {
   });
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-  // Contrast of white is 1.05/(L+0.05); of #0b1a24 (L ~ 0.009) is (L+0.05)/0.059.
-  return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.059
+  // Contrast of white is 1.05/(L+0.05); of black is (L+0.05)/0.05.
+  return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05
     ? "#ffffff"
-    : "#0b1a24";
+    : "#000000";
 }

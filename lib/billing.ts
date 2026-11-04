@@ -33,6 +33,7 @@ export function formatBillDate(d: string) {
 // "T00:00:00" fix to avoid a timezone-driven off-by-one day.
 export function formatPaymentDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -46,9 +47,13 @@ export function displayBillStatus(
   bill: { status: string; due_date: string },
   graceDays = 0
 ) {
+  // Due on the 1st means "pay by the end of the 1st": the bill only becomes
+  // overdue once that whole day (plus any grace days) has passed, i.e. from
+  // the start of the next one. (It used to flip at 00:00 on the due date
+  // itself, so a bill due today already read "overdue".)
   const cutoff = new Date(bill.due_date + "T00:00:00");
-  cutoff.setDate(cutoff.getDate() + graceDays);
-  if (bill.status !== "paid" && cutoff < new Date()) return "overdue";
+  cutoff.setDate(cutoff.getDate() + graceDays + 1);
+  if (bill.status !== "paid" && cutoff <= new Date()) return "overdue";
   return bill.status;
 }
 

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { createAdminClient } from "@/lib/supabase/admin";
 
 // Thin wrappers around the login_attempt_* database functions (migration
 // 0021). The rules themselves -- 3 wrong tries, 5-minute lock -- live in SQL

@@ -20,9 +20,13 @@ import { sendPasswordResetEmail } from "@/lib/mailer";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
 import { toDateString } from "@/lib/billing";
 import { friendlyError } from "@/lib/errors";
+import { validatePassword } from "@/lib/password-policy";
+import { generateResetToken, hashResetToken } from "@/lib/reset-token";
+import { checkRateLimit, clientIpFrom } from "@/lib/rate-limit";
 import {
   beginLoginAttempt,
   clearLoginAttempts,
+  describeWait,
   invalidCredentialsMessage,
   lockedMessage,
   recordFailedLogin,
@@ -214,19 +218,32 @@ export async function requestPasswordReset(formData: FormData) {
 
   const admin = createAdminClient();
 
-  const { data: user } = await admin
-    .from("users")
-    .select("id, full_name, email")
-    .eq("email", email)
-    .maybeSingle();
+  // Every request sends an email, so unlimited requests would let anyone spam
+  // a victim's inbox (or burn the Gmail quota). Counted for unknown emails too,
+  // and the answer below is identical either way, so this reveals nothing.
+  const ip = clientIpFrom(await headers());
+  const [perEmail, perIp] = await Promise.all([
+    checkRateLimit(admin, `reset:email:${email}`, 3, 15 * 60),
+    checkRateLimit(admin, `reset:ip:${ip}`, 10, 60 * 60),
+  ]);
+  const limited = !perEmail.allowed || !perIp.allowed;
+
+  const { data: user } = limited
+    ? { data: null }
+    : await admin
+        .from("users")
+        .select("id, full_name, email")
+        .eq("email", email)
+        .maybeSingle();
 
   if (user) {
-    const token = crypto.randomBytes(32).toString("hex");
+    // The link carries the token; the database keeps only its hash.
+    const { token, hash } = generateResetToken();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
     const { error: tokenError } = await admin
       .from("users")
-      .update({ reset_token: token, reset_token_expires: expiresAt })
+      .update({ reset_token: hash, reset_token_expires: expiresAt })
       .eq("id", user.id);
 
     if (!tokenError) {
@@ -265,10 +282,11 @@ export async function resetPassword(formData: FormData) {
 
   const tokenQuery = `token=${encodeURIComponent(token)}`;
 
-  if (!password || password.length < 6) {
+  const passwordProblem = validatePassword(password);
+
+  if (passwordProblem) {
     redirect(
-      `/reset-password?${tokenQuery}&error=` +
-        encodeURIComponent("Password must be at least 6 characters.")
+      `/reset-password?${tokenQuery}&error=` + encodeURIComponent(passwordProblem)
     );
   }
 
@@ -284,7 +302,7 @@ export async function resetPassword(formData: FormData) {
   const { data: user } = await admin
     .from("users")
     .select("id, email, full_name, role, dorm_id, reset_token_expires")
-    .eq("reset_token", token)
+    .eq("reset_token", hashResetToken(token))
     .maybeSingle();
 
   if (
@@ -295,6 +313,14 @@ export async function resetPassword(formData: FormData) {
     redirect(
       "/reset-password?error=" +
         encodeURIComponent("This reset link is invalid or has expired.")
+    );
+  }
+
+  const emailProblem = validatePassword(password, { email: user.email });
+
+  if (emailProblem) {
+    redirect(
+      `/reset-password?${tokenQuery}&error=` + encodeURIComponent(emailProblem)
     );
   }
 
@@ -353,14 +379,31 @@ export async function signUpOwner(formData: FormData) {
     redirect("/signup?error=" + encodeURIComponent("Fill in every field."));
   }
 
-  if (password.length < 6) {
-    redirect(
-      "/signup?error=" +
-        encodeURIComponent("Password must be at least 6 characters.")
-    );
+  const passwordProblem = validatePassword(password, { email });
+
+  if (passwordProblem) {
+    redirect("/signup?error=" + encodeURIComponent(passwordProblem));
   }
 
   const admin = createAdminClient();
+
+  const signupLimit = await checkRateLimit(
+    admin,
+    `signup:ip:${clientIpFrom(await headers())}`,
+    10,
+    60 * 60
+  );
+
+  if (!signupLimit.allowed) {
+    redirect(
+      "/signup?error=" +
+        encodeURIComponent(
+          `Too many sign-ups from this connection. Please try again in ${describeWait(
+            signupLimit.retryAfterSeconds
+          )}.`
+        )
+    );
+  }
 
   const { data: existing } = await admin
     .from("users")
@@ -453,14 +496,32 @@ export async function signUpTenant(formData: FormData) {
     );
   }
 
-  if (password.length < 6) {
-    redirect(
-      "/signup/tenant?error=" +
-        encodeURIComponent("Password must be at least 6 characters.")
-    );
+  const passwordProblem = validatePassword(password, { email });
+
+  if (passwordProblem) {
+    redirect("/signup/tenant?error=" + encodeURIComponent(passwordProblem));
   }
 
   const admin = createAdminClient();
+
+  // A Dorm ID is a short code; without a limit it could be guessed at will.
+  const ip = clientIpFrom(await headers());
+  const [signupLimit, lookupLimit] = await Promise.all([
+    checkRateLimit(admin, `signup:ip:${ip}`, 10, 60 * 60),
+    checkRateLimit(admin, `lookup:ip:${ip}`, 20, 10 * 60),
+  ]);
+  const blocked = !signupLimit.allowed ? signupLimit : !lookupLimit.allowed ? lookupLimit : null;
+
+  if (blocked) {
+    redirect(
+      "/signup/tenant?error=" +
+        encodeURIComponent(
+          `Too many attempts from this connection. Please try again in ${describeWait(
+            blocked.retryAfterSeconds
+          )}.`
+        )
+    );
+  }
 
   const { data: matches, error: lookupError } = await admin.rpc(
     "lookup_dormitory_by_code",
@@ -829,6 +890,24 @@ export async function submitRegistrationRequest(formData: FormData) {
   }
 
   const admin = createAdminClient();
+
+  // Same guessing protection as the sign-up form: by connection AND by account.
+  const [ipLimit, userLimit] = await Promise.all([
+    checkRateLimit(admin, `lookup:ip:${clientIpFrom(await headers())}`, 20, 10 * 60),
+    checkRateLimit(admin, `lookup:user:${session.user.id}`, 10, 10 * 60),
+  ]);
+  const lookupBlocked = !ipLimit.allowed ? ipLimit : !userLimit.allowed ? userLimit : null;
+
+  if (lookupBlocked) {
+    redirect(
+      "/tenant?error=" +
+        encodeURIComponent(
+          `Too many attempts. Please try again in ${describeWait(
+            lookupBlocked.retryAfterSeconds
+          )}.`
+        )
+    );
+  }
 
   const { data: matches, error: lookupError } = await admin.rpc(
     "lookup_dormitory_by_code",
@@ -2660,7 +2739,7 @@ export async function recordUtilityPayment(formData: FormData) {
       amount,
       description: "Utility payment",
       recorded_by: session!.user.id,
-      occurred_at: new Date().toISOString().slice(0, 10),
+      occurred_at: toDateString(new Date()),
       dorm_id: dormId,
     });
 

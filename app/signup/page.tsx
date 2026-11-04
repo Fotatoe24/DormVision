@@ -1,3 +1,4 @@
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/password-policy";
 import Link from "next/link";
 import { signUpOwner } from "@/lib/actions";
 import { ToastListener } from "@/components/toast-listener";
@@ -78,13 +79,13 @@ export default function OwnerSignUpPage() {
               name="password"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               placeholder="••••••••"
               className={inputClass}
               ariaDescribedBy="password-hint"
             />
             <p id="password-hint" className="mt-1.5 text-xs text-foreground-muted">
-              At least 6 characters.
+              {PASSWORD_HINT}
             </p>
           </div>
 

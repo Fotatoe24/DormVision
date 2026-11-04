@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { createAdminClient } from "@/lib/supabase/admin";
 import type { SessionPayload } from "@/lib/jwt";
 
 // Server-side half of sign-in sessions (migration 0022). The cookie is a signed

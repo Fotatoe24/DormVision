@@ -80,6 +80,10 @@ export default async function TenantsPage({
         .from("bills")
         .select("tenant_id, status, due_date, total_amount, amount_paid")
         .in("tenant_id", tenantIds)
+        // A balance is the sum of what is still owed, and a paid bill owes
+        // nothing -- so don't download every paid bill ever issued just to skip
+        // it in the loop below.
+        .neq("status", "paid")
     : { data: [], error: null };
 
   if (billsError) {

@@ -24,6 +24,7 @@ const reviewedStatusLabels: Record<string, string> = {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
     month: "short",
     day: "numeric",
     year: "numeric",
