@@ -1,3 +1,4 @@
+import { applyLateFees } from "@/lib/late-fees";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -71,6 +72,9 @@ export default async function AdminPage() {
   if (!dormId) {
     redirect("/");
   }
+
+  // Charge the late fee on anything that has just gone past due, before the bills are read.
+  await applyLateFees(dormId);
 
   const supabase = createAdminClient();
 

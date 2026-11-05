@@ -2203,6 +2203,73 @@ export async function createBill(formData: FormData) {
 }
 
 // ============================================================
+// WAIVE A LATE FEE
+//
+// The fee itself is charged automatically (lib/late-fees.ts); this is the
+// owner taking it back off one bill. It can't be charged again afterwards
+// (late_fee_waived_at, migration 0029).
+// ============================================================
+
+export async function waiveLateFee(formData: FormData) {
+  const dormId = await requireOwnerDormId();
+  const billId = String(formData.get("billId") ?? "").trim();
+  const supabase = createAdminClient();
+
+  const { data: bill } = billId
+    ? await supabase
+        .from("bills")
+        .select("id, tenant_id, rent_amount, other_charges, late_fee, amount_paid")
+        .eq("id", billId)
+        .eq("dorm_id", dormId)
+        .maybeSingle()
+    : { data: null };
+
+  if (!bill) {
+    redirect("/admin/tenants?error=" + encodeURIComponent("Bill not found."));
+  }
+
+  const page = `/admin/tenants/${bill.tenant_id}`;
+  const fail = (message: string): never =>
+    redirect(`${page}?error=${encodeURIComponent(message)}`);
+
+  const fee = Number(bill.late_fee);
+  const base = Number(bill.rent_amount) + Number(bill.other_charges);
+  const paid = Number(bill.amount_paid);
+
+  if (fee <= 0) fail("This bill has no late fee to waive.");
+
+  // Payments are applied to the bill as a whole. If the tenant has already paid
+  // more than rent + other charges, part of the fee is paid, and taking it off
+  // would leave them overpaid.
+  if (paid > base + 0.004) {
+    fail("The tenant has already paid part of this late fee, so it can't be waived.");
+  }
+
+  const status = paid >= base - 0.004 ? "paid" : paid > 0 ? "partial" : "unpaid";
+
+  const { error } = await supabase
+    .from("bills")
+    .update({
+      late_fee: 0,
+      late_fee_waived_at: new Date().toISOString(),
+      status,
+    })
+    .eq("id", bill.id)
+    .eq("dorm_id", dormId)
+    .eq("late_fee", bill.late_fee);
+
+  if (error) {
+    fail(friendlyError(error, "Could not waive the late fee. Please try again."));
+  }
+
+  revalidatePath(page);
+  revalidatePath("/admin/billing");
+  revalidatePath("/admin");
+
+  redirect(`${page}?saved=${encodeURIComponent("Late fee waived.")}`);
+}
+
+// ============================================================
 // RECORD PAYMENT
 // ============================================================
 

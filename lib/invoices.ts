@@ -69,6 +69,7 @@ export async function getInvoiceData(billId: string): Promise<InvoiceResult> {
       due_date,
       rent_amount,
       other_charges,
+      late_fee,
       total_amount,
       amount_paid,
       status,
@@ -160,6 +161,9 @@ export async function getInvoiceData(billId: string): Promise<InvoiceResult> {
       label: "Other charges",
       amount: Number(bill.other_charges),
     });
+  }
+  if (Number(bill.late_fee) > 0) {
+    lineItems.push({ label: "Late payment fee", amount: Number(bill.late_fee) });
   }
 
   const graceDays = bill.dorm_id ? await getGraceDays(bill.dorm_id) : 0;

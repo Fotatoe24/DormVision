@@ -1,3 +1,4 @@
+import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
@@ -16,6 +17,7 @@ import {
   removeTenantFromRoom,
   transferTenant,
   moveOutTenant,
+  waiveLateFee,
   reactivateTenant,
 } from "@/lib/actions";
 import {
@@ -64,6 +66,8 @@ export async function TenantDetailContent({
 }) {
   const supabase = createAdminClient();
 
+  await applyLateFees(dormId);
+
   const { data: tenant } = await supabase
     .from("tenants")
     .select(
@@ -108,7 +112,7 @@ export async function TenantDetailContent({
       : Promise.resolve({ data: null }),
     supabase
       .from("bills")
-      .select("id, status, due_date, total_amount, amount_paid", {
+      .select("id, status, due_date, total_amount, amount_paid, late_fee", {
         count: "exact",
       })
       .eq("tenant_id", tenant.id)
@@ -431,13 +435,31 @@ export async function TenantDetailContent({
                     <p className="text-xs text-foreground-muted">
                       Paid {formatMoney(bill.amount_paid)} of{" "}
                       {formatMoney(bill.total_amount)}
+                      {Number(bill.late_fee) > 0 &&
+                        ` (includes ${formatMoney(bill.late_fee)} late fee)`}
                     </p>
                   </div>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${billStatusStyles[displayStatus]}`}
-                  >
-                    {displayStatus}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {Number(bill.late_fee) > 0 && bill.status !== "paid" && (
+                      <form action={waiveLateFee}>
+                        <input type="hidden" name="billId" value={bill.id} />
+                        <ConfirmSubmitButton
+                          className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground-muted hover:text-foreground"
+                          title="Waive this late fee?"
+                          description={`The ${formatMoney(bill.late_fee)} late fee comes off this bill and won't be charged again.`}
+                          confirmLabel="Waive fee"
+                          tone="default"
+                        >
+                          Waive late fee
+                        </ConfirmSubmitButton>
+                      </form>
+                    )}
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${billStatusStyles[displayStatus]}`}
+                    >
+                      {displayStatus}
+                    </span>
+                  </div>
                 </div>
               );
             })}

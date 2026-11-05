@@ -1,3 +1,4 @@
+import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -85,6 +86,7 @@ export default async function TenantBillingPage({
     console.error("Tenant lookup error:", tenantError);
   }
 
+  await applyLateFees(me?.dorm_id);
   const graceDays = me?.dorm_id ? await getGraceDays(me.dorm_id) : 0;
 
   // Dorms they've already moved out of -- their billing stays viewable.
@@ -120,6 +122,7 @@ export default async function TenantBillingPage({
           due_date,
           rent_amount,
           other_charges,
+          late_fee,
           charges_note,
           total_amount,
           amount_paid,
@@ -331,6 +334,8 @@ export default async function TenantBillingPage({
                         Rent {formatMoney(bill.rent_amount)}
                         {Number(bill.other_charges) > 0 &&
                           ` + ${formatMoney(bill.other_charges)} other charges`}
+                        {Number(bill.late_fee) > 0 &&
+                          ` + ${formatMoney(bill.late_fee)} late fee`}
                       </span>
 
                       <span className="font-mono text-accent">

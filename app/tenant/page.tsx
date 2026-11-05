@@ -1,3 +1,4 @@
+import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -182,6 +183,8 @@ export default async function TenantPage({
   // what's actually owed. Capped, not paginated -- same "small-dorm
   // scale" reasoning as the utility bills query above.
   // ---------------------------------------------------------
+  await applyLateFees(me?.dorm_id);
+
   const { data: standingBills } = me?.id
     ? await supabase
         .from("bills")

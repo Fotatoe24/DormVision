@@ -78,6 +78,7 @@ export async function getReceiptData(
         due_date,
         rent_amount,
         other_charges,
+        late_fee,
         total_amount,
         amount_paid
       )
@@ -101,6 +102,7 @@ export async function getReceiptData(
         due_date: string;
         rent_amount: number | string;
         other_charges: number | string;
+        late_fee: number | string;
         total_amount: number | string;
         amount_paid: number | string;
       }
@@ -114,6 +116,7 @@ export async function getReceiptData(
         due_date: string;
         rent_amount: number | string;
         other_charges: number | string;
+        late_fee: number | string;
         total_amount: number | string;
         amount_paid: number | string;
       }[]
@@ -204,6 +207,9 @@ export async function getReceiptData(
       label: "Other charges",
       amount: Number(bill.other_charges),
     });
+  }
+  if (Number(bill.late_fee) > 0) {
+    lineItems.push({ label: "Late payment fee", amount: Number(bill.late_fee) });
   }
 
   const data: ReceiptData = {

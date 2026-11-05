@@ -1,3 +1,4 @@
+import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
 import { SubmitButton } from "@/components/submit-button";
@@ -71,6 +72,9 @@ export default async function BillingPage({
   if (!dormId) {
     redirect("/admin?error=No+dormitory+assigned");
   }
+
+  // Charge the late fee on anything that has just gone past due, before the bills are read.
+  await applyLateFees(dormId);
 
   const supabase = createAdminClient();
 

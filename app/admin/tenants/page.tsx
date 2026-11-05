@@ -1,3 +1,4 @@
+import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
 import Link from "next/link";
@@ -50,6 +51,9 @@ export default async function TenantsPage({
 
   const dormId = session.profile?.dorm_id;
   if (!dormId) redirect("/");
+
+  // Charge the late fee on anything that has just gone past due, before the bills are read.
+  await applyLateFees(dormId);
 
   const supabase = createAdminClient();
 
