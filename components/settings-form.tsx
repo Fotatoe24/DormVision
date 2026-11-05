@@ -179,7 +179,8 @@ export default function SettingsForm({ dorm, settings }: Props) {
             />
 
             <p className="mt-1 text-xs text-foreground-muted">
-              Number of days after the due date.
+              Days after the due date before an unpaid bill counts as overdue.
+              0 means it&apos;s overdue the day after it&apos;s due.
             </p>
           </div>
 

@@ -1,3 +1,4 @@
+import { getGraceDaysByDorm } from "@/lib/shell-data";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Clock, FileText, Receipt } from "lucide-react";
@@ -59,6 +60,9 @@ export default async function TenantHistoryPage({
   const dormIds = [
     ...new Set(stayRows.map((s) => s.dorm_id).filter(Boolean)),
   ] as string[];
+
+  // Each stay is judged by the grace period of the dorm it was in.
+  const graceByDorm = await getGraceDaysByDorm(dormIds);
 
   const { from, to } = getRange(page, BILLS_PAGE_SIZE);
 
@@ -208,7 +212,10 @@ export default async function TenantHistoryPage({
                 ) : (
                   <div className="space-y-3">
                     {stayBills.map((bill) => {
-                      const status = displayBillStatus(bill);
+                      const status = displayBillStatus(
+                        bill,
+                        (stay.dorm_id && graceByDorm.get(stay.dorm_id)) || 0
+                      );
                       const remaining =
                         Number(bill.total_amount) - Number(bill.amount_paid);
                       const billPayments = paymentsByBill.get(bill.id) ?? [];

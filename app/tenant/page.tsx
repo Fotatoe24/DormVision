@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -35,11 +36,14 @@ function rentDescription(periodStart?: string | null) {
 }
 
 // "due today" / "due in 5 days" / "3 days overdue" for the payment banner.
-function dueLabel(daysUntilDue: number | null) {
+function dueLabel(daysUntilDue: number | null, inGrace = false) {
   if (daysUntilDue === null) return "";
   if (daysUntilDue < 0) {
     const n = Math.abs(daysUntilDue);
-    return `${n} day${n === 1 ? "" : "s"} overdue`;
+    // Past the due date but still inside the grace period: not "overdue" yet.
+    return inGrace
+      ? `due ${n} day${n === 1 ? "" : "s"} ago, still within the grace period`
+      : `${n} day${n === 1 ? "" : "s"} overdue`;
   }
   if (daysUntilDue === 0) return "due today";
   if (daysUntilDue === 1) return "due tomorrow";
@@ -187,7 +191,10 @@ export default async function TenantPage({
         .limit(50)
     : { data: [] };
 
-  const standing = getAccountStanding(standingBills ?? []);
+  // How long after the due date the owner lets a bill sit before it is overdue.
+  const graceDays = me?.dorm_id ? await getGraceDays(me.dorm_id) : 0;
+
+  const standing = getAccountStanding(standingBills ?? [], graceDays);
 
   // The owner's "Payment reminders" / "Overdue notifications" toggles decide
   // whether the dashboard banner below is shown (balances stay visible in
@@ -293,7 +300,7 @@ export default async function TenantPage({
                 </span>{" "}
                 outstanding
                 {standing.nextBill
-                  ? ` · ${dueLabel(standing.daysUntilDue)} (${formatBillDate(
+                  ? ` · ${dueLabel(standing.daysUntilDue, standing.inGrace)} (${formatBillDate(
                       standing.nextBill.due_date
                     )})`
                   : ""}
@@ -459,7 +466,7 @@ export default async function TenantPage({
 
             <div className="space-y-3">
               {(utilityBills ?? []).map((bill) => {
-                const status = displayBillStatus(bill);
+                const status = displayBillStatus(bill, graceDays);
                 const remaining =
                   Number(bill.total_amount) - Number(bill.amount_paid);
 

@@ -111,3 +111,36 @@ test("days until due counts from Manila's today, not UTC's", async () => {
 
   assert.equal(standing.daysUntilDue, 1); // due tomorrow, not "in 2 days"
 });
+
+test("the dashboard standing respects the grace period too", async () => {
+  await register();
+  const bills = [
+    { status: "unpaid", due_date: "2026-11-01", total_amount: 3500, amount_paid: 0 },
+  ];
+
+  at("2026-11-03T02:00:00Z"); // Nov 3, 10 AM Manila: 2 days after the due date
+  const noGrace = getAccountStanding(bills, 0);
+  assert.equal(noGrace.status, "overdue");
+  assert.equal(noGrace.inGrace, false);
+
+  const withGrace = getAccountStanding(bills, 3);
+  assert.equal(withGrace.status, "pending", "still inside the 3-day grace period");
+  assert.equal(withGrace.inGrace, true);
+  assert.equal(withGrace.daysUntilDue, -2);
+
+  at("2026-11-04T16:00:00Z"); // Nov 5, 00:00 Manila: grace is over
+  const after = getAccountStanding(bills, 3);
+  assert.equal(after.status, "overdue");
+  assert.equal(after.inGrace, false);
+});
+
+test("a bill that isn't late is never 'in grace'", async () => {
+  await register();
+  at("2026-11-01T02:00:00Z");
+
+  const standing = getAccountStanding(
+    [{ status: "unpaid", due_date: "2026-11-05", total_amount: 3500, amount_paid: 0 }],
+    3
+  );
+  assert.equal(standing.inGrace, false);
+});

@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import { ConfirmSubmitButton } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
 import { PaginationControls } from "@/components/pagination-controls";
@@ -157,8 +158,10 @@ export async function TenantDetailContent({
     redirect(pageHref(detailPath, { billsPage }, "paymentsPage", 1));
   }
 
+  const graceDays = await getGraceDays(dormId);
+
   const balance = (unpaidBills ?? []).reduce((sum, bill) => {
-    const displayStatus = displayBillStatus(bill);
+    const displayStatus = displayBillStatus(bill, graceDays);
     if (displayStatus === "paid") return sum;
     return sum + (Number(bill.total_amount) - Number(bill.amount_paid));
   }, 0);
@@ -413,7 +416,7 @@ export async function TenantDetailContent({
         {bills && bills.length > 0 ? (
           <div>
             {bills.map((bill, i) => {
-              const displayStatus = displayBillStatus(bill);
+              const displayStatus = displayBillStatus(bill, graceDays);
               return (
                 <div
                   key={bill.id}

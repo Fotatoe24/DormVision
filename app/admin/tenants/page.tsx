@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -70,10 +71,11 @@ export default async function TenantsPage({
     );
   }
 
+  const graceDays = await getGraceDays(dormId);
   const balanceByTenant = new Map<string, number>();
 
   for (const bill of unpaidBills ?? []) {
-    if (displayBillStatus(bill) === "paid") continue;
+    if (displayBillStatus(bill, graceDays) === "paid") continue;
 
     const remaining = Math.max(
       0,

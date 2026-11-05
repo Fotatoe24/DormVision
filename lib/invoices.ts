@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth";
 import { displayBillStatus } from "@/lib/billing";
@@ -161,10 +162,12 @@ export async function getInvoiceData(billId: string): Promise<InvoiceResult> {
     });
   }
 
+  const graceDays = bill.dorm_id ? await getGraceDays(bill.dorm_id) : 0;
+
   const data: InvoiceData = {
     invoiceNumber,
     issuedAt: bill.created_at,
-    status: displayBillStatus(bill),
+    status: displayBillStatus(bill, graceDays),
     dorm: {
       name: dorm?.name ?? "DormVision",
       address: dorm?.address ?? null,

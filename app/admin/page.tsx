@@ -11,6 +11,7 @@ import {
 import { buildMonthlyTrend, trendWindowStart } from "@/lib/dashboard-stats";
 import { CopyButton } from "@/components/copy-button";
 import {
+  getGraceDays,
   getPendingMaintenanceRequestsCount,
   getPendingRequestsCount,
 } from "@/lib/shell-data";
@@ -241,9 +242,11 @@ export default async function AdminPage() {
 
   const monthlyRevenue = monthlyTrend[monthlyTrend.length - 1]?.income ?? 0;
 
+  const graceDays = await getGraceDays(dormId);
+
   const billsWithStatus = ((bills as BillRow[] | null) ?? []).map((b) => ({
     ...b,
-    displayStatus: displayBillStatus(b),
+    displayStatus: displayBillStatus(b, graceDays),
   }));
 
   const outstandingTotal = billsWithStatus

@@ -89,6 +89,7 @@ export function RoomBillingModal({
   tenants,
   utilityBills,
   redirectState,
+  graceDays = 0,
   defaultOpen = false,
 }: {
   trigger: React.ReactNode;
@@ -97,6 +98,8 @@ export function RoomBillingModal({
   tenants: ModalTenant[];
   utilityBills: ModalUtilityBill[];
   redirectState: BillingRedirectState;
+  // The dorm's grace period, so a bill reads overdue only once it has passed.
+  graceDays?: number;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -177,7 +180,7 @@ export function RoomBillingModal({
                         ) : (
                           <div className="space-y-2">
                             {tenant.bills.map((bill) => {
-                              const status = displayBillStatus(bill);
+                              const status = displayBillStatus(bill, graceDays);
                               const remaining =
                                 Number(bill.total_amount) -
                                 Number(bill.amount_paid);
@@ -446,7 +449,7 @@ export function RoomBillingModal({
                 ) : (
                   <div className="space-y-2">
                     {utilityBills.map((bill) => {
-                      const status = displayBillStatus(bill);
+                      const status = displayBillStatus(bill, graceDays);
                       const remaining =
                         Number(bill.total_amount) - Number(bill.amount_paid);
 

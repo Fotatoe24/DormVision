@@ -96,6 +96,24 @@ export async function getGraceDays(dormId: string) {
   return data?.grace_period_days ?? 0;
 }
 
+// Grace days for several dorms at once (a tenant's history can span dorms).
+// A dorm with no settings row, or any lookup problem, counts as 0 -- the same
+// default as before the setting was wired up.
+export async function getGraceDaysByDorm(dormIds: string[]) {
+  const graceByDorm = new Map<string, number>();
+  if (dormIds.length === 0) return graceByDorm;
+
+  const { data } = await createAdminClient()
+    .from("dorm_settings")
+    .select("dorm_id, grace_period_days")
+    .in("dorm_id", dormIds);
+
+  for (const row of data ?? []) {
+    graceByDorm.set(row.dorm_id, row.grace_period_days ?? 0);
+  }
+  return graceByDorm;
+}
+
 // The signed-in user's display photo and avatar color, for the account row in
 // the sidebar. Loaded separately from the session (the login token doesn't
 // carry it) and never throws: no photo simply means initials are shown.

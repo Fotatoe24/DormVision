@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
 import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
@@ -5,7 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateMonthlyBills } from "@/lib/actions";
 import {
-  displayBillStatus as displayStatus,
+  displayBillStatus,
   toDateString,
 } from "@/lib/billing";
 import { pickVisibleBills } from "@/lib/bill-history";
@@ -72,6 +73,11 @@ export default async function BillingPage({
   }
 
   const supabase = createAdminClient();
+
+  // The dorm's grace period (Settings) decides when a bill reads as overdue.
+  const graceDays = await getGraceDays(dormId);
+  const displayStatus = (bill: { status: string; due_date: string }) =>
+    displayBillStatus(bill, graceDays);
 
   // ============================================================
   // LOAD ROOMS, TENANTS, AND THE UNPAID BILLS
@@ -435,6 +441,7 @@ export default async function BillingPage({
               }))}
               utilityBills={modalUtilityByRoom.get(room.id) ?? []}
               redirectState={redirectState}
+              graceDays={graceDays}
               defaultOpen={openRoomId === room.id}
               trigger={
                 <div className="flex items-center justify-between rounded-lg border border-border bg-surface p-5 transition-colors hover:border-primary/40">

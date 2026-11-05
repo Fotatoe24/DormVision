@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -147,8 +148,9 @@ export default async function MonitoringPage() {
     unpaid: 0,
     overdue: 0,
   };
+  const graceDays = await getGraceDays(dormId);
   for (const b of billRows) {
-    const s = displayBillStatus(b);
+    const s = displayBillStatus(b, graceDays);
     billStatusCounts[s] = (billStatusCounts[s] ?? 0) + 1;
   }
 

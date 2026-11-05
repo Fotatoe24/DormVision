@@ -1,3 +1,4 @@
+import { getGraceDays } from "@/lib/shell-data";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -73,7 +74,7 @@ export default async function TenantBillingPage({
   // ---------------------------------------------------------
   const { data: me, error: tenantError } = await supabase
     .from("tenants")
-    .select("id, profile_id")
+    .select("id, profile_id, dorm_id")
     .eq("profile_id", session.user.id)
     .order("status", { ascending: true })
     .order("created_at", { ascending: false })
@@ -83,6 +84,8 @@ export default async function TenantBillingPage({
   if (tenantError) {
     console.error("Tenant lookup error:", tenantError);
   }
+
+  const graceDays = me?.dorm_id ? await getGraceDays(me.dorm_id) : 0;
 
   // Dorms they've already moved out of -- their billing stays viewable.
   const { count: pastStaysCount } = await supabase
@@ -291,7 +294,7 @@ export default async function TenantBillingPage({
           ) : (
             <div className="space-y-3">
               {(bills ?? []).map((bill) => {
-                const status = displayBillStatus(bill);
+                const status = displayBillStatus(bill, graceDays);
 
                 const remaining =
                   Number(bill.total_amount) - Number(bill.amount_paid);

@@ -75,15 +75,20 @@ export type AccountStanding = {
   status: "current" | "pending" | "partial" | "overdue";
   balance: number;
   nextBill: StandingBill | null;
-  /** Negative when overdue, 0 when due today, positive days remaining otherwise. */
+  /** Negative when past the due date, 0 when due today, positive days remaining otherwise. */
   daysUntilDue: number | null;
+  /** Past the due date but still inside the dorm's grace period, so not overdue yet. */
+  inGrace: boolean;
 };
 
 // Single source of truth for "how is this tenant's account doing right
 // now" — derived from bills the same way displayBillStatus derives a
 // single bill's overdue state, so the dashboard's summary card and the
 // per-bill list below it can never disagree with each other.
-export function getAccountStanding(bills: StandingBill[]): AccountStanding {
+export function getAccountStanding(
+  bills: StandingBill[],
+  graceDays = 0
+): AccountStanding {
   const outstanding = bills.filter(
     (b) => Number(b.total_amount) - Number(b.amount_paid) > 0.004
   );
@@ -99,6 +104,7 @@ export function getAccountStanding(bills: StandingBill[]): AccountStanding {
       balance: 0,
       nextBill: null,
       daysUntilDue: null,
+      inGrace: false,
     };
   }
 
@@ -114,7 +120,9 @@ export function getAccountStanding(bills: StandingBill[]): AccountStanding {
   const due = new Date(nextBill.due_date + "T00:00:00");
   const daysUntilDue = Math.round((due.getTime() - today.getTime()) / 86400000);
 
-  const isOverdue = outstanding.some((b) => displayBillStatus(b) === "overdue");
+  const isOverdue = outstanding.some(
+    (b) => displayBillStatus(b, graceDays) === "overdue"
+  );
   const isPartial =
     !isOverdue && outstanding.some((b) => b.status === "partial");
 
@@ -124,5 +132,11 @@ export function getAccountStanding(bills: StandingBill[]): AccountStanding {
     ? "partial"
     : "pending";
 
-  return { status, balance, nextBill, daysUntilDue };
+  return {
+    status,
+    balance,
+    nextBill,
+    daysUntilDue,
+    inGrace: !isOverdue && daysUntilDue < 0,
+  };
 }
