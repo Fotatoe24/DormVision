@@ -200,7 +200,9 @@ export function ConfirmSubmitButton({
         aria-busy={pending}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
-        className={`${className ?? ""} disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`${
+          className ?? ""
+        } disabled:cursor-not-allowed disabled:opacity-60`}
       >
         {pending ? (
           <span className="inline-flex items-center justify-center gap-2">
@@ -219,7 +221,9 @@ export function ConfirmSubmitButton({
         open={open}
         title={title}
         description={description}
-        confirmLabel={confirmLabel ?? (typeof children === "string" ? children : "Confirm")}
+        confirmLabel={
+          confirmLabel ?? (typeof children === "string" ? children : "Confirm")
+        }
         tone={tone}
         onCancel={() => setOpen(false)}
         onConfirm={() => {
