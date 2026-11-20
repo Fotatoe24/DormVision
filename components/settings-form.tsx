@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { CreditCard, Users, Bell, Wrench, Save } from "lucide-react";
+import { CreditCard, Users, Bell, Wrench, Save, Building2 } from "lucide-react";
 
 type Settings = {
   id: string;
@@ -25,9 +25,17 @@ type Props = {
   dorm: {
     id: string;
     name: string;
+    address: string | null;
+    contact_number: string | null;
+    email: string | null;
+    operating_hours: string | null;
   };
   settings: Settings | null;
 };
+
+const labelClass = "mb-1.5 block text-xs font-medium text-foreground-muted";
+const inputClass =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-foreground-muted/60 focus:border-primary focus:ring-1 focus:ring-primary";
 
 export default function SettingsForm({ dorm, settings }: Props) {
   const [saving, setSaving] = useState(false);
@@ -80,6 +88,11 @@ export default function SettingsForm({ dorm, settings }: Props) {
     settings?.require_maintenance_approval ?? false
   );
 
+  const [address, setAddress] = useState(dorm.address ?? "");
+  const [contactNumber, setContactNumber] = useState(dorm.contact_number ?? "");
+  const [contactEmail, setContactEmail] = useState(dorm.email ?? "");
+  const [operatingHours, setOperatingHours] = useState(dorm.operating_hours ?? "");
+
   async function saveSettings() {
     setSaving(true);
 
@@ -108,6 +121,11 @@ export default function SettingsForm({ dorm, settings }: Props) {
 
           maintenanceRequests,
           maintenanceApproval,
+
+          address,
+          contactNumber,
+          contactEmail,
+          operatingHours,
         }),
       });
 
@@ -128,6 +146,90 @@ export default function SettingsForm({ dorm, settings }: Props) {
 
   return (
     <div className="space-y-5">
+      {/* Contact info */}
+      <section className="rounded-lg border border-border bg-surface p-5">
+        <div className="mb-5 flex items-start gap-3">
+          <div className="rounded-md bg-primary/10 p-2 text-primary">
+            <Building2 className="h-4 w-4" />
+          </div>
+
+          <div>
+            <h2 className="font-heading text-sm font-semibold">
+              Dorm contact info
+            </h2>
+            <p className="text-xs text-foreground-muted">
+              Shown to your tenants on their home page and printed on invoices
+              and receipts. Leave a field empty to hide it.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label htmlFor="dorm-address" className={labelClass}>
+              Address
+            </label>
+            <input
+              id="dorm-address"
+              type="text"
+              maxLength={200}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Street, barangay, city"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="dorm-phone" className={labelClass}>
+              Contact number
+            </label>
+            <input
+              id="dorm-phone"
+              type="tel"
+              maxLength={40}
+              value={contactNumber}
+              onChange={(e) => setContactNumber(e.target.value)}
+              placeholder="0917 123 4567"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="dorm-email" className={labelClass}>
+              Contact email
+            </label>
+            <input
+              id="dorm-email"
+              type="email"
+              maxLength={254}
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="dorm@example.com"
+              className={inputClass}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label htmlFor="dorm-hours" className={labelClass}>
+              Office hours
+            </label>
+            <input
+              id="dorm-hours"
+              type="text"
+              maxLength={120}
+              value={operatingHours}
+              onChange={(e) => setOperatingHours(e.target.value)}
+              placeholder="Mon–Sat, 8am–6pm"
+              className={inputClass}
+            />
+            <p className="mt-1 text-xs text-foreground-muted">
+              When tenants can reach you or pay in person.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Billing */}
       <section className="rounded-lg border border-border bg-surface p-5">
         <div className="mb-5 flex items-start gap-3">
@@ -207,14 +309,14 @@ export default function SettingsForm({ dorm, settings }: Props) {
         <div className="mt-5 space-y-2 border-t border-border pt-4">
           <Toggle
             label="Payment reminders"
-            description="Show tenants a reminder on their dashboard when a payment is coming up."
+            description="Remind tenants on their dashboard, and by email 3 days before, when a payment is coming up."
             checked={paymentReminders}
             onChange={setPaymentReminders}
           />
 
           <Toggle
             label="Overdue notifications"
-            description="Show tenants an alert on their dashboard when their balance is overdue."
+            description="Alert tenants on their dashboard, and by email once, when their balance is overdue."
             checked={overdueNotifications}
             onChange={setOverdueNotifications}
           />
@@ -282,7 +384,7 @@ export default function SettingsForm({ dorm, settings }: Props) {
               Notifications
             </h2>
             <p className="text-xs text-foreground-muted">
-              Choose which alerts you get as badges and emails. Reminders and overdue alerts for tenants appear on their dashboard only (no emails or texts yet).
+              Choose which alerts you get as badges and emails. Tenant reminders and overdue alerts are set under Billing & payments.
             </p>
           </div>
         </div>

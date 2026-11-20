@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotificationEmail } from "@/lib/mailer";
 import { getNotificationSettings } from "@/lib/notification-settings";
 import { getMaintenanceSettings } from "@/lib/maintenance-settings";
-import { formatMoney, paymentMethodLabels } from "@/lib/billing";
+import { formatBillDate, formatMoney, paymentMethodLabels } from "@/lib/billing";
 
 // Email notifications for the events people actually wait on. Each function:
 //
@@ -262,6 +262,146 @@ export function notifyTenantPaymentDecision(
             "Please check with them, then report it again if you've paid.",
           ],
       cta: { label: "View billing", url: `${origin}/tenant/billing` },
+    });
+  });
+}
+
+// Several tenants' contacts in two queries (tenants, then their accounts)
+// instead of two per tenant.
+async function tenantContacts(tenantIds: string[]) {
+  const contacts = new Map<
+    string,
+    { email: string; fullName: string; dormId: string | null }
+  >();
+  if (tenantIds.length === 0) return contacts;
+
+  const admin = createAdminClient();
+  const { data: tenants } = await admin
+    .from("tenants")
+    .select("id, full_name, dorm_id, profile_id")
+    .in("id", tenantIds);
+
+  const profileIds = (tenants ?? [])
+    .map((t) => t.profile_id)
+    .filter((id): id is string => Boolean(id));
+  if (profileIds.length === 0) return contacts;
+
+  const { data: users } = await admin
+    .from("users")
+    .select("id, email, disabled_at")
+    .in("id", profileIds);
+  const userById = new Map((users ?? []).map((u) => [u.id, u]));
+
+  for (const tenant of tenants ?? []) {
+    const user = tenant.profile_id ? userById.get(tenant.profile_id) : null;
+    if (user?.email && !user.disabled_at) {
+      contacts.set(tenant.id, {
+        email: user.email,
+        fullName: tenant.full_name,
+        dormId: tenant.dorm_id,
+      });
+    }
+  }
+  return contacts;
+}
+
+// The owner issued a bill. One email per tenant, a few at a time so generating a
+// whole dorm's bills never opens dozens of mail connections at once.
+// Transactional, like the other tenant-facing emails: not behind a toggle.
+export function notifyTenantsNewBill(
+  origin: string,
+  items: { tenantId: string; amount: number; dueDate: string }[]
+) {
+  return safely("new bills", async () => {
+    const contacts = await tenantContacts(items.map((i) => i.tenantId));
+    const dormNames = new Map<string, string>();
+
+    const send = async (item: (typeof items)[number]) => {
+      const contact = contacts.get(item.tenantId);
+      if (!contact) return;
+
+      if (contact.dormId && !dormNames.has(contact.dormId)) {
+        dormNames.set(contact.dormId, await dormName(contact.dormId));
+      }
+      const dorm = (contact.dormId && dormNames.get(contact.dormId)) || "your dormitory";
+      const amount = formatMoney(item.amount);
+      const due = formatBillDate(item.dueDate);
+
+      await sendNotificationEmail({
+        to: contact.email,
+        subject: `New bill: ${amount} due ${due}`,
+        heading: "You have a new bill",
+        paragraphs: [
+          `Hi ${contact.fullName.split(" ")[0] || "there"}, ${dorm} issued a new bill of ${amount}, due on ${due}.`,
+          "Pay your dorm owner, then report the payment in DormVision so they can confirm it.",
+        ],
+        cta: { label: "View my bill", url: `${origin}/tenant/billing` },
+        footer: `You're receiving this because ${dorm} billed you through DormVision.`,
+      });
+    };
+
+    const BATCH = 5;
+    for (let i = 0; i < items.length; i += BATCH) {
+      // One failed address must not stop the rest.
+      await Promise.all(
+        items.slice(i, i + BATCH).map((item) =>
+          send(item).catch((error) =>
+            console.error("Notification failed (new bill):", error)
+          )
+        )
+      );
+    }
+  });
+}
+
+// The owner moved a maintenance request along. "pending" (a reset) is not news.
+const MAINTENANCE_UPDATES: Record<
+  string,
+  { subject: string; heading: string; line: string }
+> = {
+  acknowledged: {
+    subject: "Your maintenance request was received",
+    heading: "Your request was acknowledged",
+    line: "has been acknowledged by your dorm owner.",
+  },
+  in_progress: {
+    subject: "Work has started on your maintenance request",
+    heading: "Work has started",
+    line: "is now being worked on.",
+  },
+  completed: {
+    subject: "Your maintenance request is completed",
+    heading: "Your request is completed",
+    line: "has been marked as completed.",
+  },
+  rejected: {
+    subject: "Update on your maintenance request",
+    heading: "Your request wasn't accepted",
+    line: "couldn't be accepted by your dorm owner. You can contact them for details, or submit a new request.",
+  },
+};
+
+export function notifyTenantMaintenanceUpdate(
+  origin: string,
+  tenantId: string,
+  requestTitle: string,
+  status: string
+) {
+  return safely("maintenance update", async () => {
+    const copy = MAINTENANCE_UPDATES[status];
+    if (!copy) return;
+
+    const contact = (await tenantContacts([tenantId])).get(tenantId);
+    if (!contact) return;
+
+    await sendNotificationEmail({
+      to: contact.email,
+      subject: copy.subject,
+      heading: copy.heading,
+      paragraphs: [
+        `Hi ${contact.fullName.split(" ")[0] || "there"}, your request "${requestTitle}" ${copy.line}`,
+      ],
+      cta: { label: "View my requests", url: `${origin}/tenant/maintenance` },
     });
   });
 }

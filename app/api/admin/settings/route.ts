@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth";
+import { parseDormContact } from "@/lib/dorm-contact";
 
 export async function PATCH(request: Request) {
   try {
@@ -96,6 +97,16 @@ export async function PATCH(request: Request) {
     }
 
     // ---------------------------------------------------------
+    // Validate the dorm's contact details (shown to tenants, printed on
+    // invoices and receipts)
+    // ---------------------------------------------------------
+    const contact = parseDormContact(body);
+
+    if (!contact.ok) {
+      return NextResponse.json({ error: contact.error }, { status: 400 });
+    }
+
+    // ---------------------------------------------------------
     // Save settings
     // ---------------------------------------------------------
     const { data: settings, error: settingsError } = await supabase
@@ -135,6 +146,30 @@ export async function PATCH(request: Request) {
         {
           error: "Failed to save dorm settings",
         },
+        { status: 500 }
+      );
+    }
+
+    // A form from before these fields existed (a tab left open across a deploy)
+    // doesn't send them; treating that as "empty everything" would wipe the
+    // saved details, so only touch them when the request carries them.
+    const sendsContact = ["address", "contactNumber", "contactEmail", "operatingHours"].some(
+      (key) => key in body
+    );
+
+    const { error: contactError } = sendsContact
+      ? await supabase
+          .from("dormitories")
+          .update(contact.value)
+          .eq("id", dormId)
+          .eq("owner_id", session.user.id)
+      : { error: null };
+
+    if (contactError) {
+      console.error("Failed to save dorm contact info:", contactError);
+
+      return NextResponse.json(
+        { error: "Failed to save the dorm's contact info" },
         { status: 500 }
       );
     }

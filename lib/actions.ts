@@ -41,6 +41,8 @@ import {
   notifyAdminSignIn,
   notifyAdminsNewDormPending,
   notifyOwnerMaintenanceRequest,
+  notifyTenantMaintenanceUpdate,
+  notifyTenantsNewBill,
   notifyOwnerNewRegistration,
   notifyTenantPaymentDecision,
   notifyTenantRegistrationDecision,
@@ -2088,6 +2090,17 @@ export async function generateMonthlyBills() {
     }
 
     createdCount = tenantsToBill.length;
+
+    await queueEmail((origin) =>
+      notifyTenantsNewBill(
+        origin,
+        tenantsToBill.map((tenant) => ({
+          tenantId: tenant.id,
+          amount: Number(tenant.room?.monthly_rate ?? 0),
+          dueDate: toDateString(dueDate),
+        }))
+      )
+    );
   }
 
   revalidatePath("/admin/billing");
@@ -2196,6 +2209,12 @@ export async function createBill(formData: FormData) {
       })
     );
   }
+
+  await queueEmail((origin) =>
+    notifyTenantsNewBill(origin, [
+      { tenantId: tenant.id, amount: rentAmount + otherCharges, dueDate },
+    ])
+  );
 
   revalidatePath("/admin/billing");
 
@@ -3248,18 +3267,20 @@ export async function updateMaintenanceRequestStatus(formData: FormData) {
 
   const supabase = createAdminClient();
 
+  // The request as it is now: needed for the approval rule below, and to tell
+  // whether this update actually changes anything (only a change is emailed).
+  const { data: current } = await supabase
+    .from("maintenance_requests")
+    .select("status, tenant_id, title")
+    .eq("id", requestId)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
   // "Require maintenance approval" toggle: when on, a pending request
   // must be acknowledged (or rejected) before work can start or finish.
   const { requireApproval } = await getMaintenanceSettings(dormId);
 
   if (requireApproval && (status === "in_progress" || status === "completed")) {
-    const { data: current } = await supabase
-      .from("maintenance_requests")
-      .select("status")
-      .eq("id", requestId)
-      .eq("dorm_id", dormId)
-      .maybeSingle();
-
     if (current?.status === "pending") {
       redirect(
         "/admin/maintenance?error=" +
@@ -3293,6 +3314,12 @@ export async function updateMaintenanceRequestStatus(formData: FormData) {
     redirect(
       "/admin/maintenance?error=" +
         encodeURIComponent("Request not found or access denied.")
+    );
+  }
+
+  if (current && current.status !== status) {
+    await queueEmail((origin) =>
+      notifyTenantMaintenanceUpdate(origin, current.tenant_id, current.title, status)
     );
   }
 

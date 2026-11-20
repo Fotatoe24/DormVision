@@ -8,6 +8,7 @@ import { getTenantAccessState } from "@/lib/tenant-status";
 import { RegistrationStatus } from "@/components/registration-status";
 import { getNotificationSettings } from "@/lib/notification-settings";
 import { UserAvatar } from "@/components/user-avatar";
+import { DormContactCard } from "@/components/dorm-contact-card";
 import {
   billStatusStyles,
   formatMoney,
@@ -224,6 +225,14 @@ export default async function TenantPage({
     : { data: [] };
 
   type RecentPaymentBillRel = { billing_period_start: string } | null;
+
+  const { data: dormContact } = me?.dorm_id
+    ? await supabase
+        .from("dormitories")
+        .select("name, address, contact_number, email, operating_hours")
+        .eq("id", me.dorm_id)
+        .maybeSingle()
+    : { data: null };
 
   const latestPayment = (recentPayments ?? [])[0] ?? null;
   const firstName = (session.profile?.full_name ?? "there").split(" ")[0];
@@ -584,6 +593,8 @@ export default async function TenantPage({
           )}
         </div>
       </div>
+
+      <DormContactCard dorm={dormContact} />
     </div>
   );
 }

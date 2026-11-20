@@ -23,7 +23,11 @@ export default async function AdminSettingsPage() {
   }
 
   const [{ data: dorm }, { data: settings }] = await Promise.all([
-    supabase.from("dormitories").select("id, name").eq("id", dormId).single(),
+    supabase
+      .from("dormitories")
+      .select("id, name, address, contact_number, email, operating_hours")
+      .eq("id", dormId)
+      .single(),
 
     supabase
       .from("dorm_settings")
