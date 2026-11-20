@@ -3,7 +3,7 @@
 // for trend data (see app/admin/monitoring/page.tsx's BarRow) is a
 // hand-rolled component rather than a dependency. A visually-hidden
 // table carries the same data for screen readers / a no-JS table view.
-function compactMoney(n: number) {
+export function compactMoney(n: number) {
   if (n >= 1000) {
     const thousands = n / 1000;
     return `₱${thousands % 1 === 0 ? thousands.toFixed(0) : thousands.toFixed(1)}K`;
@@ -11,7 +11,7 @@ function compactMoney(n: number) {
   return `₱${Math.round(n)}`;
 }
 
-function niceMax(value: number) {
+export function niceMax(value: number) {
   if (value <= 0) return 1;
   const magnitude = 10 ** Math.floor(Math.log10(value));
   const normalized = value / magnitude;

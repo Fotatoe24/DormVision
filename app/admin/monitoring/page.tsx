@@ -5,6 +5,13 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, displayBillStatus } from "@/lib/billing";
+import { AlertTriangle, BedDouble, Receipt, TrendingUp } from "lucide-react";
+import {
+  BilledCollectedColumns,
+  OccupancyColumns,
+  StatTile,
+  StatusDonut,
+} from "@/components/monitoring-charts";
 
 type RoomRow = { id: string; capacity: number; status: string };
 type TenantRow = {
@@ -30,9 +37,9 @@ const roomStatusLabels: Record<string, string> = {
 };
 
 const roomStatusColors: Record<string, string> = {
-  available: "bg-status-paid",
-  full: "bg-status-unpaid",
-  maintenance: "bg-status-partial",
+  available: "var(--color-status-paid)",
+  full: "var(--color-status-unpaid)",
+  maintenance: "var(--color-status-partial)",
 };
 
 const billStatusLabels: Record<string, string> = {
@@ -43,47 +50,14 @@ const billStatusLabels: Record<string, string> = {
 };
 
 const billStatusColors: Record<string, string> = {
-  paid: "bg-status-paid",
-  partial: "bg-status-partial",
-  unpaid: "bg-status-unpaid",
-  overdue: "bg-status-overdue",
+  paid: "var(--color-status-paid)",
+  partial: "var(--color-status-partial)",
+  unpaid: "var(--color-status-unpaid)",
+  overdue: "var(--color-status-overdue)",
 };
 
 function monthLabel(d: Date) {
   return d.toLocaleDateString("en-PH", { month: "short", year: "2-digit" });
-}
-
-// Simple horizontal bar row — used for every chart on this page instead
-// of pulling in a charting library, matching the app's existing
-// hand-rolled-component style. `fraction` is clamped to [0, 1].
-function BarRow({
-  label,
-  value,
-  fraction,
-  colorClass,
-}: {
-  label: string;
-  value: string;
-  fraction: number;
-  colorClass: string;
-}) {
-  const pct = Math.max(0, Math.min(1, fraction)) * 100;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-20 shrink-0 text-xs text-foreground-muted">
-        {label}
-      </span>
-      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-muted">
-        <div
-          className={`h-full rounded-full ${colorClass}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="w-24 shrink-0 text-right font-mono text-xs text-foreground-muted">
-        {value}
-      </span>
-    </div>
-  );
 }
 
 export default async function MonitoringPage() {
@@ -144,7 +118,7 @@ export default async function MonitoringPage() {
   }
 
   // ------------------------------------------------------------
-  // Current snapshot: bill status breakdown
+  // Current snapshot: bill status breakdown, plus what is still owed
   // ------------------------------------------------------------
   const billStatusCounts: Record<string, number> = {
     paid: 0,
@@ -152,10 +126,20 @@ export default async function MonitoringPage() {
     unpaid: 0,
     overdue: 0,
   };
+  let outstandingTotal = 0;
+  let outstandingBills = 0;
+  let overdueTotal = 0;
   const graceDays = await getGraceDays(dormId);
   for (const b of billRows) {
     const s = displayBillStatus(b, graceDays);
     billStatusCounts[s] = (billStatusCounts[s] ?? 0) + 1;
+
+    if (s !== "paid") {
+      const owed = Math.max(0, Number(b.total_amount) - Number(b.amount_paid));
+      outstandingTotal += owed;
+      outstandingBills++;
+      if (s === "overdue") overdueTotal += owed;
+    }
   }
 
   // ------------------------------------------------------------
@@ -205,13 +189,19 @@ export default async function MonitoringPage() {
     return { label: monthLabel(monthStart), billed, collected };
   });
 
-  const maxOccupied = Math.max(totalBeds, 1);
-  const maxFinancial = Math.max(...financialTrend.map((m) => m.billed), 1);
-  const maxRoomCount = Math.max(roomRows.length, 1);
-  const maxBillCount = Math.max(billRows.length, 1);
+  // ------------------------------------------------------------
+  // Headline figures
+  // ------------------------------------------------------------
+  const occupiedNow = tenantRows.filter((t) => t.status === "active" && t.room_id).length;
+  const occupancyRate = totalBeds > 0 ? Math.min(1, occupiedNow / totalBeds) : 0;
+
+  const thisMonth = financialTrend[financialTrend.length - 1];
+  const collectionRate = thisMonth.billed > 0 ? thisMonth.collected / thisMonth.billed : null;
+
+  const overdueCount = billStatusCounts.overdue ?? 0;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-5xl">
       <div className="mb-6">
         <p className="text-xs text-foreground-muted">Owner dashboard</p>
         <h1 className="font-heading text-lg font-semibold text-primary">
@@ -223,97 +213,106 @@ export default async function MonitoringPage() {
         </p>
       </div>
 
-      {/* Occupancy trend */}
-      <div className="mb-6 rounded-lg border border-border bg-surface p-6">
-        <p className="mb-4 font-heading text-sm font-semibold">
-          Occupancy — last 6 months
-        </p>
-        <div className="space-y-2.5">
-          {occupancyTrend.map((m) => (
-            <BarRow
-              key={m.label}
-              label={m.label}
-              value={`${m.occupied}/${totalBeds}`}
-              fraction={m.occupied / maxOccupied}
-              colorClass="bg-primary"
-            />
-          ))}
+      {/* At a glance */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          icon={BedDouble}
+          label="Bed occupancy"
+          value={`${Math.round(occupancyRate * 100)}%`}
+          sub={`${occupiedNow} of ${totalBeds} beds occupied`}
+          progress={occupancyRate}
+        />
+        <StatTile
+          icon={TrendingUp}
+          label="Collected this month"
+          value={collectionRate === null ? "—" : `${Math.round(collectionRate * 100)}%`}
+          sub={
+            collectionRate === null
+              ? "No bills for this month yet"
+              : `${formatMoney(thisMonth.collected)} of ${formatMoney(thisMonth.billed)}`
+          }
+          tone={
+            collectionRate === null
+              ? "default"
+              : collectionRate >= 0.9
+                ? "good"
+                : collectionRate >= 0.6
+                  ? "warn"
+                  : "bad"
+          }
+          progress={collectionRate ?? 0}
+        />
+        <StatTile
+          icon={Receipt}
+          label="Still owed"
+          value={formatMoney(outstandingTotal)}
+          sub={
+            outstandingBills === 0
+              ? "Everything is paid"
+              : `across ${outstandingBills} unpaid bill${outstandingBills === 1 ? "" : "s"}`
+          }
+          tone={outstandingTotal > 0 ? "warn" : "good"}
+        />
+        <StatTile
+          icon={AlertTriangle}
+          label="Overdue bills"
+          value={String(overdueCount)}
+          sub={overdueCount === 0 ? "None overdue" : `${formatMoney(overdueTotal)} overdue`}
+          tone={overdueCount > 0 ? "bad" : "good"}
+        />
+      </div>
+
+      {/* Trends */}
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-border bg-surface p-6">
+          <p className="mb-1 font-heading text-sm font-semibold">
+            Occupancy
+          </p>
+          <p className="mb-4 text-xs text-foreground-muted">Last 6 months</p>
+          <OccupancyColumns data={occupancyTrend} totalBeds={totalBeds} />
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-6">
+          <p className="mb-1 font-heading text-sm font-semibold">
+            Billed vs collected
+          </p>
+          <p className="mb-4 text-xs text-foreground-muted">
+            Last 6 months, by billing period, not payment date.
+          </p>
+          <BilledCollectedColumns data={financialTrend} />
         </div>
       </div>
 
-      {/* Financial trend */}
-      <div className="mb-6 rounded-lg border border-border bg-surface p-6">
-        <p className="mb-1 font-heading text-sm font-semibold">
-          Billed vs collected — last 6 months
-        </p>
-        <p className="mb-4 text-xs text-foreground-muted">
-          By billing period, not payment date.
-        </p>
-        <div className="space-y-4">
-          {financialTrend.map((m) => (
-            <div key={m.label}>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-xs font-medium text-foreground">
-                  {m.label}
-                </span>
-                <span className="font-mono text-xs text-foreground-muted">
-                  {formatMoney(m.collected)} / {formatMoney(m.billed)}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <BarRow
-                  label="Billed"
-                  value={formatMoney(m.billed)}
-                  fraction={m.billed / maxFinancial}
-                  colorClass="bg-accent"
-                />
-                <BarRow
-                  label="Collected"
-                  value={formatMoney(m.collected)}
-                  fraction={m.collected / maxFinancial}
-                  colorClass="bg-status-paid"
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {/* Room status breakdown */}
+      {/* Current breakdowns */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-surface p-6">
           <p className="mb-4 font-heading text-sm font-semibold">
             Rooms by status
           </p>
-          <div className="space-y-2.5">
-            {Object.entries(roomStatusCounts).map(([status, count]) => (
-              <BarRow
-                key={status}
-                label={roomStatusLabels[status] ?? status}
-                value={String(count)}
-                fraction={count / maxRoomCount}
-                colorClass={roomStatusColors[status] ?? "bg-primary"}
-              />
-            ))}
-          </div>
+          <StatusDonut
+            centerLabel={roomRows.length === 1 ? "room" : "rooms"}
+            ariaLabel="Rooms by status"
+            segments={Object.entries(roomStatusCounts).map(([status, count]) => ({
+              label: roomStatusLabels[status] ?? status,
+              value: count,
+              color: roomStatusColors[status] ?? "var(--color-primary)",
+            }))}
+          />
         </div>
 
-        {/* Bill status breakdown */}
         <div className="rounded-lg border border-border bg-surface p-6">
           <p className="mb-4 font-heading text-sm font-semibold">
             Bills by status
           </p>
-          <div className="space-y-2.5">
-            {Object.entries(billStatusCounts).map(([status, count]) => (
-              <BarRow
-                key={status}
-                label={billStatusLabels[status] ?? status}
-                value={String(count)}
-                fraction={count / maxBillCount}
-                colorClass={billStatusColors[status] ?? "bg-primary"}
-              />
-            ))}
-          </div>
+          <StatusDonut
+            centerLabel={billRows.length === 1 ? "bill" : "bills"}
+            ariaLabel="Bills by status"
+            segments={Object.entries(billStatusCounts).map(([status, count]) => ({
+              label: billStatusLabels[status] ?? status,
+              value: count,
+              color: billStatusColors[status] ?? "var(--color-primary)",
+            }))}
+          />
         </div>
       </div>
     </div>
