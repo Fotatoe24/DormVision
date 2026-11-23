@@ -185,6 +185,12 @@ function buildSheet<Row>(sheet: ExportSheet<Row>): BuiltSheet {
   };
 }
 
+// Text going into an XML element: & < > must be escaped or Excel calls the whole
+// file corrupt. (Sheet names like "Income & Expenses" contain one.)
+function xmlText(text: string) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // Print setup the library doesn't expose: fit every column on one page width,
 // repeat the header row on each printed page, and a footer with the page number
 // and the date printed. Done by editing the finished file's XML.
@@ -218,7 +224,7 @@ function applyPrintSetup(buffer: Uint8Array, headerRows: { name: string; headerR
     const names = headerRows
       .map(
         (sheet, index) =>
-          `<definedName name="_xlnm.Print_Titles" localSheetId="${index}">'${sheet.name.replace(/'/g, "''")}'!$${sheet.headerRow}:$${sheet.headerRow}</definedName>`
+          `<definedName name="_xlnm.Print_Titles" localSheetId="${index}">${xmlText(`'${sheet.name.replace(/'/g, "''")}'!$${sheet.headerRow}:$${sheet.headerRow}`)}</definedName>`
       )
       .join("");
 

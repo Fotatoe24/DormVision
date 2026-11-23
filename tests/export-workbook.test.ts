@@ -140,3 +140,32 @@ test("calendar dates and Manila times", () => {
   assert.equal(manilaWallTime("2026-11-04T17:30:00Z")?.toISOString(), "2026-11-05T01:30:00.000Z");
   assert.equal(manilaWallTime("nope"), null);
 });
+
+// Excel refuses a file with invalid XML ("this file is corrupt"). A raw "&" in a
+// sheet name was exactly that: the repeated-header setting wrote the name
+// unescaped.
+const RAW_AMPERSAND = /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-f]+;)/i;
+
+test("every XML part of the file is free of unescaped ampersands, even with '&' in sheet names", async () => {
+  const buffer = await buildWorkbook([
+    defineSheet<unknown>({ ...sheet, name: "Income & Expenses", title: "R&D <report>" }),
+    defineSheet<unknown>({ ...sheet, name: "Water & electricity" }),
+    defineSheet<unknown>({ ...sheet, name: "Tom's <b> sheet" }),
+  ]);
+  const files = unzipSync(new Uint8Array(buffer));
+
+  for (const [name, bytes] of Object.entries(files)) {
+    if (!/\.(xml|rels)$/.test(name)) continue;
+    const xml = strFromU8(bytes);
+    assert.doesNotMatch(xml, RAW_AMPERSAND, `${name} has an unescaped &`);
+  }
+
+  const workbook = strFromU8(files["xl/workbook.xml"]);
+  assert.match(workbook, /'Income &amp; Expenses'!\$\d+:\$\d+/);
+  assert.match(workbook, /'Water &amp; electricity'!/);
+  assert.match(workbook, /'Tom''s &lt;b&gt; sheet'!/);
+
+  // and the file still reads back, with the names intact
+  const sheets = (await readExcelFile(buffer)) as { sheet: string }[];
+  assert.deepEqual(sheets.map((s) => s.sheet), ["Income & Expenses", "Water & electricity", "Tom's <b> sheet"]);
+});
