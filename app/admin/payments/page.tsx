@@ -1,3 +1,4 @@
+import { ExportButton } from "@/components/export-button";
 import { LoadError } from "@/components/load-error";
 import { SubmitButton } from "@/components/submit-button";
 import { redirect } from "next/navigation";
@@ -84,12 +85,13 @@ export default async function PaymentsPage({
     paymentsQuery = paymentsQuery.eq("method", method);
   }
 
+  // The dorm's days are Manila days (UTC+8), not UTC days.
   if (from) {
-    paymentsQuery = paymentsQuery.gte("paid_at", `${from}T00:00:00`);
+    paymentsQuery = paymentsQuery.gte("paid_at", `${from}T00:00:00+08:00`);
   }
 
   if (to) {
-    paymentsQuery = paymentsQuery.lte("paid_at", `${to}T23:59:59`);
+    paymentsQuery = paymentsQuery.lte("paid_at", `${to}T23:59:59+08:00`);
   }
 
   const { from: rangeFrom, to: rangeTo } = getRange(page);
@@ -120,8 +122,8 @@ export default async function PaymentsPage({
   if (method && ["cash", "bank_transfer", "gcash", "other"].includes(method)) {
     sumQuery = sumQuery.eq("method", method);
   }
-  if (from) sumQuery = sumQuery.gte("paid_at", `${from}T00:00:00`);
-  if (to) sumQuery = sumQuery.lte("paid_at", `${to}T23:59:59`);
+  if (from) sumQuery = sumQuery.gte("paid_at", `${from}T00:00:00+08:00`);
+  if (to) sumQuery = sumQuery.lte("paid_at", `${to}T23:59:59+08:00`);
 
   const { data: sumRows } = tenantIds.length
     ? await sumQuery.in("tenant_id", tenantIds)
@@ -164,14 +166,19 @@ export default async function PaymentsPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <p className="text-xs text-foreground-muted">Owner dashboard</p>
-        <h1 className="font-heading text-lg font-semibold text-primary">
-          Payments
-        </h1>
-        <p className="text-xs text-foreground-muted">
-          {paymentsCount ?? 0} payment(s) totalling {formatMoney(total)}
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-foreground-muted">Owner dashboard</p>
+          <h1 className="font-heading text-lg font-semibold text-primary">
+            Payments
+          </h1>
+          <p className="text-xs text-foreground-muted">
+            {paymentsCount ?? 0} payment(s) totalling {formatMoney(total)}
+          </p>
+        </div>
+
+        {/* Exports exactly what the filters below are showing. */}
+        <ExportButton kind="payments" params={{ q, method, from, to }} />
       </div>
 
       {/* ======================================================

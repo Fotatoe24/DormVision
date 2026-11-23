@@ -1,3 +1,4 @@
+import { ExportButton } from "@/components/export-button";
 import { LoadError } from "@/components/load-error";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -409,6 +410,12 @@ export default async function ExpensesPage({
           </h1>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        <ExportButton
+          kind="income-expenses"
+          params={{ range, category: categoryFilter, q }}
+        />
+
         <TransactionModal
           title="Add transaction"
           action={createTransaction}
@@ -422,6 +429,7 @@ export default async function ExpensesPage({
             </button>
           }
         />
+        </div>
       </div>
 
       {error && (

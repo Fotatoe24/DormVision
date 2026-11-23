@@ -1,3 +1,4 @@
+import { ExportButton } from "@/components/export-button";
 import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
@@ -332,16 +333,34 @@ export default async function BillingPage({
             HEADER
         ====================================================== */}
 
-        <div className="mb-6">
-          <h1 className="font-heading text-lg font-semibold text-primary">
-            Billing
-          </h1>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-heading text-lg font-semibold text-primary">
+              Billing
+            </h1>
 
-          <p className="text-xs text-foreground-muted">
-            {outstandingRoomCount === 0
-              ? "Every room is paid up."
-              : `${outstandingRoomCount} room(s) with an outstanding balance.`}
-          </p>
+            <p className="text-xs text-foreground-muted">
+              {outstandingRoomCount === 0
+                ? "Every room is paid up."
+                : `${outstandingRoomCount} room(s) with an outstanding balance.`}
+            </p>
+          </div>
+
+          {/* Rent and water & electricity bills, for a due-date range and status. */}
+          <ExportButton
+            kind="bills"
+            label="Export bills"
+            options={{
+              dates: true,
+              statusLabel: "Bill status",
+              statuses: [
+                { value: "overdue", label: "Overdue" },
+                { value: "unpaid", label: "Unpaid" },
+                { value: "partial", label: "Partial" },
+                { value: "paid", label: "Paid" },
+              ],
+            }}
+          />
         </div>
 
         {/* ======================================================

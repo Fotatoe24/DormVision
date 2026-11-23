@@ -1,3 +1,4 @@
+import { ExportButton } from "@/components/export-button";
 import { LoadError } from "@/components/load-error";
 import { EmptyState } from "@/components/empty-state";
 import { BedDouble } from "lucide-react";
@@ -154,11 +155,15 @@ export default async function RoomsPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <p className="text-xs text-foreground-muted">Owner dashboard</p>
-        <h1 className="font-heading text-lg font-semibold text-primary">
-          Rooms
-        </h1>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-foreground-muted">Owner dashboard</p>
+          <h1 className="font-heading text-lg font-semibold text-primary">
+            Rooms
+          </h1>
+        </div>
+
+        <ExportButton kind="rooms" />
       </div>
 
       {error && (

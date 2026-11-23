@@ -1,3 +1,4 @@
+import { ExportButton } from "@/components/export-button";
 import { applyLateFees } from "@/lib/late-fees";
 import { getGraceDays } from "@/lib/shell-data";
 import { LoadError } from "@/components/load-error";
@@ -189,11 +190,15 @@ export default async function TenantsPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <p className="text-xs text-foreground-muted">Owner dashboard</p>
-        <h1 className="font-heading text-lg font-semibold text-primary">
-          Tenants
-        </h1>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-foreground-muted">Owner dashboard</p>
+          <h1 className="font-heading text-lg font-semibold text-primary">
+            Tenants
+          </h1>
+        </div>
+
+        <ExportButton kind="tenants" params={{ q, status, payment }} />
       </div>
 
       {/* Search + tenant and payment filters */}
